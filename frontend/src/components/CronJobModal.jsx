@@ -10,7 +10,7 @@ export const CronJobModal = ({
   schedulePatterns = [],
   initialValues = null
 }) => {
-  const [activeTab, setActiveTab] = useState('pattern'); // 'pattern', 'simple', 'advanced'
+  const [activeTab, setActiveTab] = useState('simple'); // Default to simple builder for end users
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
   // General Form Fields
@@ -53,7 +53,7 @@ export const CronJobModal = ({
   useEffect(() => {
     if (show) {
       setErrorMsg(null);
-      setShowAdvancedJson(false); // Default to clean human form view
+      setShowAdvancedJson(false); // Always default to clean human form view on create & edit
 
       if (initialValues) {
         setName(initialValues.name || '');
@@ -62,7 +62,7 @@ export const CronJobModal = ({
         setTimezone(initialValues.timezone || 'Asia/Kolkata');
         setCronExpression(initialValues.cronExpression || '0 9 * * *');
         
-        // Populate friendly parameter form from existing payload without showing raw JSON
+        // Populate friendly parameter form from existing payload
         const payload = initialValues.payload || {};
         if (payload.factoryId !== undefined) setFactoryId(String(payload.factoryId));
         if (payload.reportFormat) setReportFormat(payload.reportFormat);
@@ -72,7 +72,9 @@ export const CronJobModal = ({
         if (payload.retentionDays !== undefined) setRetentionDays(String(payload.retentionDays));
 
         setPayloadJson(JSON.stringify(payload, null, 2));
-        setActiveTab('advanced');
+
+        // On edit, keep simple builder active so user sees human schedule
+        setActiveTab('simple');
       } else {
         setName('');
         const defaultJobType = jobTypes[0]?.key || 'DAILY_SALES_REPORT';
@@ -207,6 +209,10 @@ export const CronJobModal = ({
     });
   };
 
+  // Build dynamic factory options so any factory ID (101, 3, 1, etc.) renders cleanly in the dropdown
+  const defaultFactories = ['1', '2', '3', '4', '5'];
+  const hasCustomFactory = factoryId && !defaultFactories.includes(factoryId);
+
   return (
     <Modal show={show} onHide={onHide} centered size="lg">
       <Modal.Header closeButton>
@@ -255,13 +261,13 @@ export const CronJobModal = ({
               <span className="fw-bold text-dark">Schedule Setup</span>
               <Nav variant="pills" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
                 <Nav.Item>
-                  <Nav.Link eventKey="pattern" className="py-1 px-3">
-                    Pattern Master
+                  <Nav.Link eventKey="simple" className="py-1 px-3">
+                    Simple Builder
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="simple" className="py-1 px-3">
-                    Simple Builder
+                  <Nav.Link eventKey="pattern" className="py-1 px-3">
+                    Pattern Master
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
@@ -430,6 +436,9 @@ export const CronJobModal = ({
                           <option value="3">Assembly Unit #3</option>
                           <option value="4">Logistics Center #4</option>
                           <option value="5">Plant Unit #5</option>
+                          {hasCustomFactory && (
+                            <option value={factoryId}>Factory #{factoryId}</option>
+                          )}
                         </Form.Select>
                       </Form.Group>
                     </Col>
