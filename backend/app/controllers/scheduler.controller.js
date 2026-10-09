@@ -101,6 +101,36 @@ class SchedulerController {
       next(error);
     }
   }
+
+  // Schedule Pattern Masters
+  async getAllSchedulePatterns(req, res, next) {
+    try {
+      const patterns = await schedulerService.getAllSchedulePatterns();
+      res.json({ success: true, data: patterns });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createSchedulePattern(req, res, next) {
+    try {
+      const pattern = await schedulerService.createSchedulePattern(req.body);
+      res.status(201).json({ success: true, data: pattern, message: 'Schedule pattern created.' });
+    } catch (error) {
+      res.status(400);
+      next(error);
+    }
+  }
+
+  async deleteSchedulePattern(req, res, next) {
+    try {
+      const result = await schedulerService.deleteSchedulePattern(req.params.id);
+      res.json({ success: true, message: result.message });
+    } catch (error) {
+      res.status(400);
+      next(error);
+    }
+  }
 }
 
 module.exports = new SchedulerController();

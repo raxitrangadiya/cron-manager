@@ -1,6 +1,6 @@
 const { Queue } = require('bullmq');
 const { redisConfig } = require('../config/redis');
-const { CronJob, CronJobLog } = require('../models');
+const { CronJob, CronJobLog, SchedulePattern } = require('../models');
 const { validateCronExpression, getNextRunDate } = require('../utils/cronValidator');
 const { getJobHandler, jobHandlers } = require('../workers/handlers');
 
@@ -8,24 +8,14 @@ const { getJobHandler, jobHandlers } = require('../workers/handlers');
 const schedulerQueue = new Queue('scheduler-queue', { connection: redisConfig });
 
 class SchedulerService {
-  /**
-   * Helper to compute BullMQ repeat key format
-   */
   static getRepeatJobId(cronJobId) {
     return `job:${cronJobId}`;
   }
 
-  /**
-   * Startup Sync: Reads all ACTIVE jobs from PostgreSQL and ensures they are scheduled in BullMQ.
-   * Ensures schedules survive API, Worker, Redis, and Server restarts.
-   */
   async syncSchedulesWithBullMQ() {
     console.log('[SchedulerService] Synchronizing schedules from PostgreSQL to BullMQ...');
     try {
-      // Fetch all active jobs from DB
       const activeJobs = await CronJob.findAll({ where: { status: 'ACTIVE' } });
-      
-      // Clean existing repeatable jobs in BullMQ to start clean
       const existingRepeatableJobs = await schedulerQueue.getRepeatableJobs();
       for (const repeatJob of existingRepeatableJobs) {
         await schedulerQueue.removeRepeatableByKey(repeatJob.key);
@@ -42,9 +32,6 @@ class SchedulerService {
     }
   }
 
-  /**
-   * Helper: Registers a repeatable job in BullMQ
-   */
   async addRepeatableJobToBullMQ(cronJob) {
     const jobData = {
       cronJobId: cronJob.id,
@@ -66,9 +53,6 @@ class SchedulerService {
     );
   }
 
-  /**
-   * Helper: Removes repeatable job from BullMQ
-   */
   async removeRepeatableJobFromBullMQ(cronJob) {
     const repeatableJobs = await schedulerQueue.getRepeatableJobs();
     const targetJobId = SchedulerService.getRepeatJobId(cronJob.id);
@@ -80,9 +64,6 @@ class SchedulerService {
     }
   }
 
-  /**
-   * Get list of supported predefined job types
-   */
   getAvailableJobTypes() {
     return Object.keys(jobHandlers).map(key => ({
       key,
@@ -90,11 +71,8 @@ class SchedulerService {
     }));
   }
 
-  /**
-   * Get all cron jobs with optional pagination and filtering
-   */
   async getAllCronJobs() {
-    const jobs = await CronJob.findAll({
+    return await CronJob.findAll({
       order: [['createdAt', 'DESC']],
       include: [
         {
@@ -105,12 +83,8 @@ class SchedulerService {
         }
       ]
     });
-    return jobs;
   }
 
-  /**
-   * Get single job by ID with logs
-   */
   async getCronJobById(id) {
     const job = await CronJob.findByPk(id, {
       include: [
@@ -122,30 +96,19 @@ class SchedulerService {
         }
       ]
     });
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
     return job;
   }
 
-  /**
-   * Create a new scheduled job
-   */
   async createCronJob(data) {
     const { name, jobType, cronExpression, timezone = 'Asia/Kolkata', payload = {} } = data;
-
-    // 1. Validate predefined jobType
     getJobHandler(jobType);
 
-    // 2. Validate cron expression
     const validation = validateCronExpression(cronExpression, timezone);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
+    if (!validation.valid) throw new Error(validation.error);
 
     const nextRunAt = getNextRunDate(cronExpression, timezone);
 
-    // 3. Save to PostgreSQL (Source of Truth)
     const newJob = await CronJob.create({
       name,
       jobType,
@@ -156,41 +119,27 @@ class SchedulerService {
       nextRunAt
     });
 
-    // 4. Add to BullMQ Queue
     await this.addRepeatableJobToBullMQ(newJob);
-
     return newJob;
   }
 
-  /**
-   * Update an existing scheduled job
-   */
   async updateCronJob(id, data) {
     const job = await CronJob.findByPk(id);
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
 
     const { name, jobType, cronExpression, timezone, payload, status } = data;
-
-    if (jobType) {
-      getJobHandler(jobType);
-    }
+    if (jobType) getJobHandler(jobType);
 
     let nextRunAt = job.nextRunAt;
     if (cronExpression) {
       const tz = timezone || job.timezone;
       const validation = validateCronExpression(cronExpression, tz);
-      if (!validation.valid) {
-        throw new Error(validation.error);
-      }
+      if (!validation.valid) throw new Error(validation.error);
       nextRunAt = getNextRunDate(cronExpression, tz);
     }
 
-    // 1. Remove old schedule from BullMQ
     await this.removeRepeatableJobFromBullMQ(job);
 
-    // 2. Update PostgreSQL
     await job.update({
       name: name !== undefined ? name : job.name,
       jobType: jobType !== undefined ? jobType : job.jobType,
@@ -201,7 +150,6 @@ class SchedulerService {
       nextRunAt
     });
 
-    // 3. If still active, add updated schedule to BullMQ
     if (job.status === 'ACTIVE') {
       await this.addRepeatableJobToBullMQ(job);
     }
@@ -209,45 +157,27 @@ class SchedulerService {
     return job;
   }
 
-  /**
-   * Pause a cron job
-   */
   async pauseCronJob(id) {
     const job = await CronJob.findByPk(id);
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
-
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
     await this.removeRepeatableJobFromBullMQ(job);
     await job.update({ status: 'PAUSED' });
     return job;
   }
 
-  /**
-   * Resume a paused cron job
-   */
   async resumeCronJob(id) {
     const job = await CronJob.findByPk(id);
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
-
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
     const nextRunAt = getNextRunDate(job.cronExpression, job.timezone);
     await job.update({ status: 'ACTIVE', nextRunAt });
     await this.addRepeatableJobToBullMQ(job);
     return job;
   }
 
-  /**
-   * Trigger job manually now (Ad-hoc run)
-   */
   async triggerJobNow(id) {
     const job = await CronJob.findByPk(id);
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
 
-    // Add a single-use immediate job to the queue
     await schedulerQueue.add(
       `manual-trigger-${job.name}`,
       {
@@ -261,35 +191,22 @@ class SchedulerService {
     return { message: `Job "${job.name}" triggered successfully.` };
   }
 
-  /**
-   * Delete a cron job
-   */
   async deleteCronJob(id) {
     const job = await CronJob.findByPk(id);
-    if (!job) {
-      throw new Error(`Cron Job with ID ${id} not found.`);
-    }
-
+    if (!job) throw new Error(`Cron Job with ID ${id} not found.`);
     await this.removeRepeatableJobFromBullMQ(job);
     await job.destroy();
     return { message: `Cron Job ${id} deleted successfully.` };
   }
 
-  /**
-   * Get logs for a specific job
-   */
   async getJobLogs(jobId, limit = 50) {
-    const logs = await CronJobLog.findAll({
+    return await CronJobLog.findAll({
       where: { jobId },
       order: [['createdAt', 'DESC']],
       limit
     });
-    return logs;
   }
 
-  /**
-   * Get Dashboard Metrics
-   */
   async getDashboardMetrics() {
     const totalJobs = await CronJob.count();
     const activeJobs = await CronJob.count({ where: { status: 'ACTIVE' } });
@@ -298,14 +215,36 @@ class SchedulerService {
     const failedLogs = await CronJobLog.count({ where: { status: 'FAILED' } });
     const successLogs = await CronJobLog.count({ where: { status: 'SUCCESS' } });
 
-    return {
-      totalJobs,
-      activeJobs,
-      pausedJobs,
-      totalLogs,
-      failedLogs,
-      successLogs
-    };
+    return { totalJobs, activeJobs, pausedJobs, totalLogs, failedLogs, successLogs };
+  }
+
+  // Schedule Pattern Masters (Windows Task Scheduler Style)
+  async getAllSchedulePatterns() {
+    return await SchedulePattern.findAll({
+      order: [['isPreset', 'DESC'], ['name', 'ASC']]
+    });
+  }
+
+  async createSchedulePattern(data) {
+    const { name, description, scheduleType, cronExpression } = data;
+    const validation = validateCronExpression(cronExpression);
+    if (!validation.valid) throw new Error(validation.error);
+
+    return await SchedulePattern.create({
+      name,
+      description,
+      scheduleType: scheduleType || 'CUSTOM',
+      cronExpression: cronExpression.trim(),
+      isPreset: false
+    });
+  }
+
+  async deleteSchedulePattern(id) {
+    const pattern = await SchedulePattern.findByPk(id);
+    if (!pattern) throw new Error('Schedule pattern not found.');
+    if (pattern.isPreset) throw new Error('Cannot delete system preset pattern.');
+    await pattern.destroy();
+    return { message: 'Schedule pattern deleted successfully.' };
   }
 }
 

@@ -17,6 +17,21 @@ export const getJobTypes = async () => {
   return response.data.data;
 };
 
+export const getSchedulePatterns = async () => {
+  const response = await api.get('/patterns');
+  return response.data.data;
+};
+
+export const createSchedulePattern = async (patternData) => {
+  const response = await api.post('/patterns', patternData);
+  return response.data.data;
+};
+
+export const deleteSchedulePattern = async (id) => {
+  const response = await api.delete(`/patterns/${id}`);
+  return response.data;
+};
+
 export const getJobs = async () => {
   const response = await api.get('/jobs');
   return response.data.data;

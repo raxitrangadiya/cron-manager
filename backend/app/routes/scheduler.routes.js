@@ -6,6 +6,11 @@ const schedulerController = require('../controllers/scheduler.controller');
 router.get('/metrics', schedulerController.getDashboardMetrics);
 router.get('/job-types', schedulerController.getAvailableJobTypes);
 
+// Schedule Pattern Masters (Windows Task Scheduler Style)
+router.get('/patterns', schedulerController.getAllSchedulePatterns);
+router.post('/patterns', schedulerController.createSchedulePattern);
+router.delete('/patterns/:id', schedulerController.deleteSchedulePattern);
+
 // Cron Jobs CRUD
 router.get('/jobs', schedulerController.getAllCronJobs);
 router.get('/jobs/:id', schedulerController.getCronJobById);

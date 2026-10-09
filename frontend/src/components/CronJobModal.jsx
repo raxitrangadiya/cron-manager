@@ -7,9 +7,10 @@ export const CronJobModal = ({
   onHide,
   onSubmit,
   jobTypes = [],
+  schedulePatterns = [],
   initialValues = null
 }) => {
-  const [activeTab, setActiveTab] = useState('simple'); // 'simple' or 'advanced'
+  const [activeTab, setActiveTab] = useState('pattern'); // 'pattern', 'simple', 'advanced'
 
   // Form fields
   const [name, setName] = useState('');
@@ -17,18 +18,20 @@ export const CronJobModal = ({
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [payloadJson, setPayloadJson] = useState('{\n  "factoryId": 3\n}');
 
+  // Selected pattern master
+  const [selectedPatternId, setSelectedPatternId] = useState('');
+
   // Simple Schedule State
-  const [freqType, setFreqType] = useState('EVERY_X_MIN'); // EVERY_X_MIN, HOURLY, DAILY, WEEKLY, MONTHLY
+  const [freqType, setFreqType] = useState('EVERY_X_MIN');
   const [minuteInterval, setMinuteInterval] = useState('5');
   const [selectedTime, setSelectedTime] = useState('09:00');
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState('1'); // 1 = Monday
-  const [selectedDayOfMonth, setSelectedDayOfMonth] = useState('1'); // 1st of month
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState('1');
+  const [selectedDayOfMonth, setSelectedDayOfMonth] = useState('1');
 
-  // Advanced Cron State
+  // Cron State
   const [cronExpression, setCronExpression] = useState('0 9 * * *');
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Initialize form when opening
   useEffect(() => {
     if (show) {
       setErrorMsg(null);
@@ -42,7 +45,7 @@ export const CronJobModal = ({
             ? JSON.stringify(initialValues.payload, null, 2)
             : '{\n  "factoryId": 3\n}'
         );
-        setActiveTab('advanced'); // For editing existing, open advanced/cron view
+        setActiveTab('advanced');
       } else {
         setName('');
         setJobType(jobTypes[0]?.key || 'DAILY_SALES_REPORT');
@@ -52,14 +55,30 @@ export const CronJobModal = ({
         setSelectedTime('09:00');
         setSelectedDayOfWeek('1');
         setSelectedDayOfMonth('1');
-        setCronExpression('*/5 * * * *');
         setPayloadJson('{\n  "factoryId": 3\n}');
-        setActiveTab('simple');
+
+        if (schedulePatterns.length > 0) {
+          setSelectedPatternId(schedulePatterns[0].id);
+          setCronExpression(schedulePatterns[0].cronExpression);
+          setActiveTab('pattern');
+        } else {
+          setCronExpression('*/5 * * * *');
+          setActiveTab('simple');
+        }
       }
     }
-  }, [show, initialValues, jobTypes]);
+  }, [show, initialValues, jobTypes, schedulePatterns]);
 
-  // Generate cron expression dynamically when simple options change
+  // Update cron when selecting a pattern master
+  const handleSelectPattern = (patternId) => {
+    setSelectedPatternId(patternId);
+    const found = schedulePatterns.find((p) => p.id === patternId);
+    if (found) {
+      setCronExpression(found.cronExpression);
+    }
+  };
+
+  // Generate cron expression dynamically in Simple Builder mode
   useEffect(() => {
     if (activeTab === 'simple') {
       let generated = '*/5 * * * *';
@@ -95,12 +114,12 @@ export const CronJobModal = ({
     setErrorMsg(null);
 
     if (!name.trim()) {
-      setErrorMsg('Please provide a job name.');
+      setErrorMsg('Please enter a job name.');
       return;
     }
 
     if (!cronExpression.trim()) {
-      setErrorMsg('Please specify a valid schedule.');
+      setErrorMsg('Please select or specify a valid schedule.');
       return;
     }
 
@@ -109,7 +128,7 @@ export const CronJobModal = ({
       try {
         parsedPayload = JSON.parse(payloadJson);
       } catch (err) {
-        setErrorMsg('Invalid JSON in payload field. Please fix formatting.');
+        setErrorMsg('Invalid JSON format in payload field.');
         return;
       }
     }
@@ -150,7 +169,7 @@ export const CronJobModal = ({
 
             <Col md={6}>
               <Form.Group>
-                <Form.Label className="fw-semibold">Action to Execute</Form.Label>
+                <Form.Label className="fw-semibold">Action / Handler</Form.Label>
                 <Form.Select
                   value={jobType}
                   onChange={(e) => setJobType(e.target.value)}
@@ -165,11 +184,16 @@ export const CronJobModal = ({
             </Col>
           </Row>
 
-          {/* Schedule Configuration Box */}
+          {/* Schedule Picker Box */}
           <div className="border rounded-3 p-3 bg-light mb-3">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <span className="fw-bold">Schedule Configuration</span>
+              <span className="fw-bold text-dark">Schedule Setup</span>
               <Nav variant="pills" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
+                <Nav.Item>
+                  <Nav.Link eventKey="pattern" className="py-1 px-3">
+                    Pattern Master
+                  </Nav.Link>
+                </Nav.Item>
                 <Nav.Item>
                   <Nav.Link eventKey="simple" className="py-1 px-3">
                     Simple Builder
@@ -183,110 +207,120 @@ export const CronJobModal = ({
               </Nav>
             </div>
 
-            {activeTab === 'simple' ? (
-              <div>
-                <Row className="g-3 align-items-center mb-3">
-                  <Col md={4}>
-                    <Form.Label className="small text-muted fw-semibold">Frequency</Form.Label>
-                    <Form.Select
-                      value={freqType}
-                      onChange={(e) => setFreqType(e.target.value)}
-                    >
-                      <option value="EVERY_X_MIN">Every X Minutes</option>
-                      <option value="HOURLY">Hourly</option>
-                      <option value="DAILY">Daily</option>
-                      <option value="WEEKLY">Weekly</option>
-                      <option value="MONTHLY">Monthly</option>
-                    </Form.Select>
-                  </Col>
-
-                  {freqType === 'EVERY_X_MIN' && (
-                    <Col md={4}>
-                      <Form.Label className="small text-muted fw-semibold">Minute Interval</Form.Label>
-                      <Form.Select
-                        value={minuteInterval}
-                        onChange={(e) => setMinuteInterval(e.target.value)}
-                      >
-                        <option value="1">Every 1 minute</option>
-                        <option value="5">Every 5 minutes</option>
-                        <option value="10">Every 10 minutes</option>
-                        <option value="15">Every 15 minutes</option>
-                        <option value="30">Every 30 minutes</option>
-                      </Form.Select>
-                    </Col>
-                  )}
-
-                  {(freqType === 'DAILY' || freqType === 'WEEKLY' || freqType === 'MONTHLY') && (
-                    <Col md={4}>
-                      <Form.Label className="small text-muted fw-semibold">Time</Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={selectedTime}
-                        onChange={(e) => setSelectedTime(e.target.value)}
-                      />
-                    </Col>
-                  )}
-
-                  {freqType === 'WEEKLY' && (
-                    <Col md={4}>
-                      <Form.Label className="small text-muted fw-semibold">Day of Week</Form.Label>
-                      <Form.Select
-                        value={selectedDayOfWeek}
-                        onChange={(e) => setSelectedDayOfWeek(e.target.value)}
-                      >
-                        <option value="1">Monday</option>
-                        <option value="2">Tuesday</option>
-                        <option value="3">Wednesday</option>
-                        <option value="4">Thursday</option>
-                        <option value="5">Friday</option>
-                        <option value="6">Saturday</option>
-                        <option value="0">Sunday</option>
-                      </Form.Select>
-                    </Col>
-                  )}
-
-                  {freqType === 'MONTHLY' && (
-                    <Col md={4}>
-                      <Form.Label className="small text-muted fw-semibold">Day of Month</Form.Label>
-                      <Form.Select
-                        value={selectedDayOfMonth}
-                        onChange={(e) => setSelectedDayOfMonth(e.target.value)}
-                      >
-                        {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Col>
-                  )}
-                </Row>
-              </div>
-            ) : (
-              <div>
-                <Form.Group className="mb-2">
-                  <Form.Label className="small text-muted fw-semibold">Cron Expression (5 fields)</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="e.g. 0 9 * * *"
-                    className="font-monospace"
-                    value={cronExpression}
-                    onChange={(e) => setCronExpression(e.target.value)}
-                  />
-                  <Form.Text className="text-muted">
-                    Format: <code>minute hour day-of-month month day-of-week</code>
-                  </Form.Text>
-                </Form.Group>
-              </div>
+            {activeTab === 'pattern' && (
+              <Form.Group className="mb-3">
+                <Form.Label className="small fw-semibold">Select Schedule Pattern Master</Form.Label>
+                <Form.Select
+                  value={selectedPatternId}
+                  onChange={(e) => handleSelectPattern(e.target.value)}
+                >
+                  {schedulePatterns.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.description || cronToHumanReadable(p.cronExpression)}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
             )}
 
-            {/* Human Summary Alert */}
+            {activeTab === 'simple' && (
+              <Row className="g-3 align-items-center mb-3">
+                <Col md={4}>
+                  <Form.Label className="small text-muted fw-semibold">Frequency</Form.Label>
+                  <Form.Select
+                    value={freqType}
+                    onChange={(e) => setFreqType(e.target.value)}
+                  >
+                    <option value="EVERY_X_MIN">Every X Minutes</option>
+                    <option value="HOURLY">Hourly</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                  </Form.Select>
+                </Col>
+
+                {freqType === 'EVERY_X_MIN' && (
+                  <Col md={4}>
+                    <Form.Label className="small text-muted fw-semibold">Interval</Form.Label>
+                    <Form.Select
+                      value={minuteInterval}
+                      onChange={(e) => setMinuteInterval(e.target.value)}
+                    >
+                      <option value="1">Every 1 minute</option>
+                      <option value="5">Every 5 minutes</option>
+                      <option value="10">Every 10 minutes</option>
+                      <option value="15">Every 15 minutes</option>
+                      <option value="30">Every 30 minutes</option>
+                    </Form.Select>
+                  </Col>
+                )}
+
+                {(freqType === 'DAILY' || freqType === 'WEEKLY' || freqType === 'MONTHLY') && (
+                  <Col md={4}>
+                    <Form.Label className="small text-muted fw-semibold">Time</Form.Label>
+                    <Form.Control
+                      type="time"
+                      value={selectedTime}
+                      onChange={(e) => setSelectedTime(e.target.value)}
+                    />
+                  </Col>
+                )}
+
+                {freqType === 'WEEKLY' && (
+                  <Col md={4}>
+                    <Form.Label className="small text-muted fw-semibold">Day of Week</Form.Label>
+                    <Form.Select
+                      value={selectedDayOfWeek}
+                      onChange={(e) => setSelectedDayOfWeek(e.target.value)}
+                    >
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                      <option value="0">Sunday</option>
+                    </Form.Select>
+                  </Col>
+                )}
+
+                {freqType === 'MONTHLY' && (
+                  <Col md={4}>
+                    <Form.Label className="small text-muted fw-semibold">Day of Month</Form.Label>
+                    <Form.Select
+                      value={selectedDayOfMonth}
+                      onChange={(e) => setSelectedDayOfMonth(e.target.value)}
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                )}
+              </Row>
+            )}
+
+            {activeTab === 'advanced' && (
+              <Form.Group className="mb-2">
+                <Form.Label className="small text-muted fw-semibold">Cron Expression (5 fields)</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="e.g. 0 9 * * *"
+                  className="font-monospace"
+                  value={cronExpression}
+                  onChange={(e) => setCronExpression(e.target.value)}
+                />
+              </Form.Group>
+            )}
+
             <Alert variant="info" className="mb-0 py-2 px-3 d-flex align-items-center justify-content-between">
               <div>
                 <span className="fw-semibold">Schedule Summary:</span>{' '}
                 <span>{cronToHumanReadable(cronExpression)}</span>
               </div>
-              <code className="text-dark bg-white px-2 py-1 rounded border small">{cronExpression}</code>
+              <code className="bg-white px-2 py-1 rounded border text-dark small">{cronExpression}</code>
             </Alert>
           </div>
 
