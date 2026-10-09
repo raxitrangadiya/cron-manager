@@ -2,6 +2,10 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Drop table if exists to ensure clean enum/type migration
+    await queryInterface.dropTable('schedule_patterns', { cascade: true }).catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_schedule_patterns_scheduleType";').catch(() => {});
+
     await queryInterface.createTable('schedule_patterns', {
       id: {
         type: Sequelize.UUID,
@@ -22,6 +26,10 @@ module.exports = {
         allowNull: false,
         defaultValue: 'DAILY'
       },
+      repeatEvery: {
+        type: Sequelize.INTEGER,
+        defaultValue: 1
+      },
       repeatIntervalMinutes: {
         type: Sequelize.INTEGER,
         allowNull: true
@@ -36,6 +44,18 @@ module.exports = {
       },
       dayOfMonth: {
         type: Sequelize.INTEGER,
+        allowNull: true
+      },
+      skipWeekends: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false
+      },
+      activeHoursStart: {
+        type: Sequelize.STRING,
+        allowNull: true
+      },
+      activeHoursEnd: {
+        type: Sequelize.STRING,
         allowNull: true
       },
       cronExpression: {
@@ -56,7 +76,7 @@ module.exports = {
       }
     });
 
-    // Seed comprehensive default presets (Windows Task Scheduler Style Default Masters)
+    // Seed comprehensive system presets
     await queryInterface.bulkInsert('schedule_patterns', [
       {
         id: '10000000-0000-0000-0000-000000000001',
@@ -83,9 +103,10 @@ module.exports = {
       {
         id: '10000000-0000-0000-0000-000000000003',
         name: 'Weekday Work Hours (Mon-Fri 9 AM)',
-        description: 'Triggers Monday through Friday at 9:00 AM',
+        description: 'Triggers Monday through Friday at 9:00 AM (skips weekends)',
         scheduleType: 'WEEKLY',
         timeOfDay: '09:00',
+        skipWeekends: true,
         daysOfWeek: JSON.stringify([1, 2, 3, 4, 5]),
         cronExpression: '0 9 * * 1-5',
         isPreset: true,

@@ -16,9 +16,13 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     scheduleType: {
-      type: DataTypes.STRING, // Supports ONCE, INTERVAL, DAILY, WEEKLY, MONTHLY_DATE, MONTHLY_RELATIVE, SEMI_ANNUALLY, YEARLY_DATE, YEARLY_RELATIVE, CUSTOM
+      type: DataTypes.STRING, // ONCE, INTERVAL, DAILY, WEEKLY, MONTHLY_DATE, MONTHLY_RELATIVE, SEMI_ANNUALLY, YEARLY_DATE, YEARLY_RELATIVE, CUSTOM
       allowNull: false,
       defaultValue: 'DAILY'
+    },
+    repeatEvery: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1
     },
     repeatIntervalMinutes: {
       type: DataTypes.INTEGER,
@@ -34,6 +38,18 @@ module.exports = (sequelize) => {
     },
     dayOfMonth: {
       type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    skipWeekends: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    activeHoursStart: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    activeHoursEnd: {
+      type: DataTypes.STRING,
       allowNull: true
     },
     cronExpression: {
