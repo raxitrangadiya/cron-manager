@@ -33,7 +33,7 @@ export const CronJobModal = ({
   // For LOG_CLEANUP
   const [retentionDays, setRetentionDays] = useState('30');
 
-  // Fallback Raw JSON String
+  // Fallback Raw JSON String (Hidden by default)
   const [payloadJson, setPayloadJson] = useState('{}');
 
   // Selected pattern master
@@ -53,6 +53,8 @@ export const CronJobModal = ({
   useEffect(() => {
     if (show) {
       setErrorMsg(null);
+      setShowAdvancedJson(false); // Default to clean human form view
+
       if (initialValues) {
         setName(initialValues.name || '');
         const currentJobType = initialValues.jobType || (jobTypes[0]?.key || 'DAILY_SALES_REPORT');
@@ -60,7 +62,7 @@ export const CronJobModal = ({
         setTimezone(initialValues.timezone || 'Asia/Kolkata');
         setCronExpression(initialValues.cronExpression || '0 9 * * *');
         
-        // Populate friendly parameter form from existing payload
+        // Populate friendly parameter form from existing payload without showing raw JSON
         const payload = initialValues.payload || {};
         if (payload.factoryId !== undefined) setFactoryId(String(payload.factoryId));
         if (payload.reportFormat) setReportFormat(payload.reportFormat);
@@ -427,6 +429,7 @@ export const CronJobModal = ({
                           <option value="2">Manufacturing Hub #2</option>
                           <option value="3">Assembly Unit #3</option>
                           <option value="4">Logistics Center #4</option>
+                          <option value="5">Plant Unit #5</option>
                         </Form.Select>
                       </Form.Group>
                     </Col>
