@@ -11,12 +11,30 @@ export const CronJobModal = ({
   initialValues = null
 }) => {
   const [activeTab, setActiveTab] = useState('pattern'); // 'pattern', 'simple', 'advanced'
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
-  // Form fields
+  // General Form Fields
   const [name, setName] = useState('');
-  const [jobType, setJobType] = useState('');
+  const [jobType, setJobType] = useState('DAILY_SALES_REPORT');
   const [timezone, setTimezone] = useState('Asia/Kolkata');
-  const [payloadJson, setPayloadJson] = useState('{\n  "factoryId": 3\n}');
+
+  // Friendly Parameter Fields for Predefined Handlers
+  // For DAILY_SALES_REPORT
+  const [factoryId, setFactoryId] = useState('1');
+  const [reportFormat, setReportFormat] = useState('PDF');
+
+  // For EMAIL_NOTIFICATION
+  const [recipientEmail, setRecipientEmail] = useState('admin@company.com');
+  const [emailTemplate, setEmailTemplate] = useState('weekly_digest');
+
+  // For ENCRYPTION_ROTATION
+  const [securityScope, setSecurityScope] = useState('ALL_KEYS');
+
+  // For LOG_CLEANUP
+  const [retentionDays, setRetentionDays] = useState('30');
+
+  // Fallback Raw JSON String
+  const [payloadJson, setPayloadJson] = useState('{}');
 
   // Selected pattern master
   const [selectedPatternId, setSelectedPatternId] = useState('');
@@ -37,25 +55,40 @@ export const CronJobModal = ({
       setErrorMsg(null);
       if (initialValues) {
         setName(initialValues.name || '');
-        setJobType(initialValues.jobType || (jobTypes[0]?.key || 'DAILY_SALES_REPORT'));
+        const currentJobType = initialValues.jobType || (jobTypes[0]?.key || 'DAILY_SALES_REPORT');
+        setJobType(currentJobType);
         setTimezone(initialValues.timezone || 'Asia/Kolkata');
         setCronExpression(initialValues.cronExpression || '0 9 * * *');
-        setPayloadJson(
-          initialValues.payload
-            ? JSON.stringify(initialValues.payload, null, 2)
-            : '{\n  "factoryId": 3\n}'
-        );
+        
+        // Populate friendly parameter form from existing payload
+        const payload = initialValues.payload || {};
+        if (payload.factoryId !== undefined) setFactoryId(String(payload.factoryId));
+        if (payload.reportFormat) setReportFormat(payload.reportFormat);
+        if (payload.recipient) setRecipientEmail(payload.recipient);
+        if (payload.template) setEmailTemplate(payload.template);
+        if (payload.scope) setSecurityScope(payload.scope);
+        if (payload.retentionDays !== undefined) setRetentionDays(String(payload.retentionDays));
+
+        setPayloadJson(JSON.stringify(payload, null, 2));
         setActiveTab('advanced');
       } else {
         setName('');
-        setJobType(jobTypes[0]?.key || 'DAILY_SALES_REPORT');
+        const defaultJobType = jobTypes[0]?.key || 'DAILY_SALES_REPORT';
+        setJobType(defaultJobType);
         setTimezone('Asia/Kolkata');
         setFreqType('EVERY_X_MIN');
         setMinuteInterval('5');
         setSelectedTime('09:00');
         setSelectedDayOfWeek('1');
         setSelectedDayOfMonth('1');
-        setPayloadJson('{\n  "factoryId": 3\n}');
+
+        setFactoryId('1');
+        setReportFormat('PDF');
+        setRecipientEmail('admin@company.com');
+        setEmailTemplate('weekly_digest');
+        setSecurityScope('ALL_KEYS');
+        setRetentionDays('30');
+        setPayloadJson('{}');
 
         if (schedulePatterns.length > 0) {
           setSelectedPatternId(schedulePatterns[0].id);
@@ -69,7 +102,7 @@ export const CronJobModal = ({
     }
   }, [show, initialValues, jobTypes, schedulePatterns]);
 
-  // Update cron when selecting a pattern master
+  // Handle pattern selection
   const handleSelectPattern = (patternId) => {
     setSelectedPatternId(patternId);
     const found = schedulePatterns.find((p) => p.id === patternId);
@@ -109,6 +142,44 @@ export const CronJobModal = ({
     }
   }, [activeTab, freqType, minuteInterval, selectedTime, selectedDayOfWeek, selectedDayOfMonth]);
 
+  // Construct payload object based on selected jobType
+  const getConstructedPayload = () => {
+    if (showAdvancedJson) {
+      try {
+        return JSON.parse(payloadJson);
+      } catch (e) {
+        return {};
+      }
+    }
+
+    switch (jobType) {
+      case 'DAILY_SALES_REPORT':
+        return {
+          factoryId: parseInt(factoryId, 10) || 1,
+          reportFormat
+        };
+      case 'EMAIL_NOTIFICATION':
+        return {
+          recipient: recipientEmail,
+          template: emailTemplate
+        };
+      case 'ENCRYPTION_ROTATION':
+        return {
+          scope: securityScope
+        };
+      case 'LOG_CLEANUP':
+        return {
+          retentionDays: parseInt(retentionDays, 10) || 30
+        };
+      default:
+        try {
+          return JSON.parse(payloadJson);
+        } catch (e) {
+          return {};
+        }
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -123,22 +194,14 @@ export const CronJobModal = ({
       return;
     }
 
-    let parsedPayload = {};
-    if (payloadJson.trim()) {
-      try {
-        parsedPayload = JSON.parse(payloadJson);
-      } catch (err) {
-        setErrorMsg('Invalid JSON format in payload field.');
-        return;
-      }
-    }
+    const payload = getConstructedPayload();
 
     onSubmit({
       name,
       jobType,
       cronExpression: cronExpression.trim(),
       timezone,
-      payload: parsedPayload
+      payload
     });
   };
 
@@ -159,7 +222,7 @@ export const CronJobModal = ({
                 <Form.Label className="fw-semibold">Job Name</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="e.g. Daily Sales Report"
+                  placeholder="e.g. Morning Sales Summary"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -169,7 +232,7 @@ export const CronJobModal = ({
 
             <Col md={6}>
               <Form.Group>
-                <Form.Label className="fw-semibold">Action / Handler</Form.Label>
+                <Form.Label className="fw-semibold">Action / Task Type</Form.Label>
                 <Form.Select
                   value={jobType}
                   onChange={(e) => setJobType(e.target.value)}
@@ -324,6 +387,134 @@ export const CronJobModal = ({
             </Alert>
           </div>
 
+          {/* User-Friendly Action Parameter Settings */}
+          <div className="border rounded-3 p-3 bg-white mb-3">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h6 className="fw-bold mb-0 text-dark">Task Parameters</h6>
+              <Button
+                variant="link"
+                size="sm"
+                className="p-0 text-decoration-none text-secondary"
+                onClick={() => setShowAdvancedJson(!showAdvancedJson)}
+              >
+                {showAdvancedJson ? '← Switch to Form Controls' : 'Advanced JSON Editor →'}
+              </Button>
+            </div>
+
+            {showAdvancedJson ? (
+              <Form.Group>
+                <Form.Label className="small text-muted fw-semibold">Payload (JSON)</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  className="font-monospace"
+                  value={payloadJson}
+                  onChange={(e) => setPayloadJson(e.target.value)}
+                />
+              </Form.Group>
+            ) : (
+              <div>
+                {jobType === 'DAILY_SALES_REPORT' && (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Factory / Plant Location</Form.Label>
+                        <Form.Select
+                          value={factoryId}
+                          onChange={(e) => setFactoryId(e.target.value)}
+                        >
+                          <option value="1">Main Plant #1 (HQ)</option>
+                          <option value="2">Manufacturing Hub #2</option>
+                          <option value="3">Assembly Unit #3</option>
+                          <option value="4">Logistics Center #4</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Export Format</Form.Label>
+                        <Form.Select
+                          value={reportFormat}
+                          onChange={(e) => setReportFormat(e.target.value)}
+                        >
+                          <option value="PDF">PDF Summary Document</option>
+                          <option value="EXCEL">Excel Spreadsheet</option>
+                          <option value="JSON">Raw JSON Data</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                )}
+
+                {jobType === 'EMAIL_NOTIFICATION' && (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Recipient Email Address</Form.Label>
+                        <Form.Control
+                          type="email"
+                          placeholder="e.g. manager@company.com"
+                          value={recipientEmail}
+                          onChange={(e) => setRecipientEmail(e.target.value)}
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Email Template</Form.Label>
+                        <Form.Select
+                          value={emailTemplate}
+                          onChange={(e) => setEmailTemplate(e.target.value)}
+                        >
+                          <option value="weekly_digest">Weekly Digest Template</option>
+                          <option value="daily_summary">Daily Summary Template</option>
+                          <option value="system_alert">System Alert Template</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                )}
+
+                {jobType === 'ENCRYPTION_ROTATION' && (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Security Credential Scope</Form.Label>
+                        <Form.Select
+                          value={securityScope}
+                          onChange={(e) => setSecurityScope(e.target.value)}
+                        >
+                          <option value="ALL_KEYS">All Application Encryption Keys</option>
+                          <option value="API_TOKENS">API Service Tokens Only</option>
+                          <option value="DATABASE">Database Credentials Only</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                )}
+
+                {jobType === 'LOG_CLEANUP' && (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label className="small fw-semibold">Log Retention Period</Form.Label>
+                        <Form.Select
+                          value={retentionDays}
+                          onChange={(e) => setRetentionDays(e.target.value)}
+                        >
+                          <option value="14">Older than 14 Days</option>
+                          <option value="30">Older than 30 Days (Standard)</option>
+                          <option value="60">Older than 60 Days</option>
+                          <option value="90">Older than 90 Days</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                )}
+              </div>
+            )}
+          </div>
+
           <Row className="g-3">
             <Col md={6}>
               <Form.Group>
@@ -333,19 +524,6 @@ export const CronJobModal = ({
                   placeholder="Asia/Kolkata"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                />
-              </Form.Group>
-            </Col>
-
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label className="small text-muted fw-semibold">Job Parameters / Payload (JSON)</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={3}
-                  className="font-monospace"
-                  value={payloadJson}
-                  onChange={(e) => setPayloadJson(e.target.value)}
                 />
               </Form.Group>
             </Col>
