@@ -1,34 +1,6 @@
-import React from 'react';
-import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
-
-const validationSchema = Yup.object({
-  name: Yup.string().required('Job Name is required'),
-  jobType: Yup.string().required('Job Type is required'),
-  cronExpression: Yup.string()
-    .required('Cron Expression is required')
-    .matches(/^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/[0-9]+)\s+(\*|([0-9]|1[0-9]|2[0-3])|\*\/[0-9]+)\s+(\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/[0-9]+)\s+(\*|([1-9]|1[0-2])|\*\/[0-9]+)\s+(\*|([0-6])|\*\/[0-9]+)$/, 'Invalid cron expression format (5 fields e.g., * * * * *)'),
-  timezone: Yup.string().required('Timezone is required'),
-  payloadJson: Yup.string().test('is-json', 'Must be valid JSON format', (value) => {
-    if (!value) return true;
-    try {
-      JSON.parse(value);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  })
-});
-
-const CRON_PRESETS = [
-  { label: 'Every minute (* * * * *)', value: '* * * * *' },
-  { label: 'Every 5 minutes (*/5 * * * *)', value: '*/5 * * * *' },
-  { label: 'Every hour (0 * * * *)', value: '0 * * * *' },
-  { label: 'Daily at 9:00 AM (0 9 * * *)', value: '0 9 * * *' },
-  { label: 'Every Monday at midnight (0 0 * * 1)', value: '0 0 * * 1' },
-  { label: 'First day of month (0 0 1 * *)', value: '0 0 1 * *' }
-];
+import React, { useState, useEffect } from 'react';
+import { Modal, Form, Button, Row, Col, Alert, Nav } from 'react-bootstrap';
+import { cronToHumanReadable } from '../utils/cronHumanizer';
 
 export const CronJobModal = ({
   show,
@@ -37,149 +9,319 @@ export const CronJobModal = ({
   jobTypes = [],
   initialValues = null
 }) => {
-  const formik = useFormik({
-    initialValues: {
-      name: initialValues?.name || '',
-      jobType: initialValues?.jobType || (jobTypes[0]?.key || 'DAILY_SALES_REPORT'),
-      cronExpression: initialValues?.cronExpression || '0 9 * * *',
-      timezone: initialValues?.timezone || 'Asia/Kolkata',
-      payloadJson: initialValues?.payload ? JSON.stringify(initialValues.payload, null, 2) : '{\n  "factoryId": 3\n}'
-    },
-    enableReinitialize: true,
-    validationSchema,
-    onSubmit: (values) => {
-      const payload = values.payloadJson ? JSON.parse(values.payloadJson) : {};
-      onSubmit({
-        name: values.name,
-        jobType: values.jobType,
-        cronExpression: values.cronExpression,
-        timezone: values.timezone,
-        payload
-      });
+  const [activeTab, setActiveTab] = useState('simple'); // 'simple' or 'advanced'
+
+  // Form fields
+  const [name, setName] = useState('');
+  const [jobType, setJobType] = useState('');
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [payloadJson, setPayloadJson] = useState('{\n  "factoryId": 3\n}');
+
+  // Simple Schedule State
+  const [freqType, setFreqType] = useState('EVERY_X_MIN'); // EVERY_X_MIN, HOURLY, DAILY, WEEKLY, MONTHLY
+  const [minuteInterval, setMinuteInterval] = useState('5');
+  const [selectedTime, setSelectedTime] = useState('09:00');
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState('1'); // 1 = Monday
+  const [selectedDayOfMonth, setSelectedDayOfMonth] = useState('1'); // 1st of month
+
+  // Advanced Cron State
+  const [cronExpression, setCronExpression] = useState('0 9 * * *');
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  // Initialize form when opening
+  useEffect(() => {
+    if (show) {
+      setErrorMsg(null);
+      if (initialValues) {
+        setName(initialValues.name || '');
+        setJobType(initialValues.jobType || (jobTypes[0]?.key || 'DAILY_SALES_REPORT'));
+        setTimezone(initialValues.timezone || 'Asia/Kolkata');
+        setCronExpression(initialValues.cronExpression || '0 9 * * *');
+        setPayloadJson(
+          initialValues.payload
+            ? JSON.stringify(initialValues.payload, null, 2)
+            : '{\n  "factoryId": 3\n}'
+        );
+        setActiveTab('advanced'); // For editing existing, open advanced/cron view
+      } else {
+        setName('');
+        setJobType(jobTypes[0]?.key || 'DAILY_SALES_REPORT');
+        setTimezone('Asia/Kolkata');
+        setFreqType('EVERY_X_MIN');
+        setMinuteInterval('5');
+        setSelectedTime('09:00');
+        setSelectedDayOfWeek('1');
+        setSelectedDayOfMonth('1');
+        setCronExpression('*/5 * * * *');
+        setPayloadJson('{\n  "factoryId": 3\n}');
+        setActiveTab('simple');
+      }
     }
-  });
+  }, [show, initialValues, jobTypes]);
+
+  // Generate cron expression dynamically when simple options change
+  useEffect(() => {
+    if (activeTab === 'simple') {
+      let generated = '*/5 * * * *';
+      const [hStr, mStr] = selectedTime.split(':');
+      const hour = parseInt(hStr, 10) || 0;
+      const min = parseInt(mStr, 10) || 0;
+
+      switch (freqType) {
+        case 'EVERY_X_MIN':
+          generated = `*/${minuteInterval} * * * *`;
+          break;
+        case 'HOURLY':
+          generated = `${min} * * * *`;
+          break;
+        case 'DAILY':
+          generated = `${min} ${hour} * * *`;
+          break;
+        case 'WEEKLY':
+          generated = `${min} ${hour} * * ${selectedDayOfWeek}`;
+          break;
+        case 'MONTHLY':
+          generated = `${min} ${hour} ${selectedDayOfMonth} * *`;
+          break;
+        default:
+          generated = '*/5 * * * *';
+      }
+      setCronExpression(generated);
+    }
+  }, [activeTab, freqType, minuteInterval, selectedTime, selectedDayOfWeek, selectedDayOfMonth]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    if (!name.trim()) {
+      setErrorMsg('Please provide a job name.');
+      return;
+    }
+
+    if (!cronExpression.trim()) {
+      setErrorMsg('Please specify a valid schedule.');
+      return;
+    }
+
+    let parsedPayload = {};
+    if (payloadJson.trim()) {
+      try {
+        parsedPayload = JSON.parse(payloadJson);
+      } catch (err) {
+        setErrorMsg('Invalid JSON in payload field. Please fix formatting.');
+        return;
+      }
+    }
+
+    onSubmit({
+      name,
+      jobType,
+      cronExpression: cronExpression.trim(),
+      timezone,
+      payload: parsedPayload
+    });
+  };
 
   return (
-    <Modal show={show} onHide={onHide} centered size="lg" contentClassName="modal-content-dark">
-      <Modal.Header closeButton closeVariant="white" className="modal-header-dark">
-        <Modal.Title className="h5 font-semibold">
-          {initialValues ? 'Edit Scheduled Job' : 'Create New Scheduled Job'}
+    <Modal show={show} onHide={onHide} centered size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title className="h5 fw-bold">
+          {initialValues ? 'Edit Scheduled Job' : 'Schedule a New Job'}
         </Modal.Title>
       </Modal.Header>
-      <Form onSubmit={formik.handleSubmit}>
+      <Form onSubmit={handleSubmit}>
         <Modal.Body className="p-4">
-          <Row className="g-3">
-            <Col md={12}>
+          {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
+
+          <Row className="g-3 mb-3">
+            <Col md={6}>
               <Form.Group>
-                <Form.Label className="small text-muted fw-semibold">Job Name</Form.Label>
+                <Form.Label className="fw-semibold">Job Name</Form.Label>
                 <Form.Control
                   type="text"
-                  name="name"
                   placeholder="e.g. Daily Sales Report"
-                  className="form-control-dark"
-                  value={formik.values.name}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  isInvalid={formik.touched.name && Boolean(formik.errors.name)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
                 />
-                <Form.Control.Feedback type="invalid">{formik.errors.name}</Form.Control.Feedback>
               </Form.Group>
             </Col>
 
             <Col md={6}>
               <Form.Group>
-                <Form.Label className="small text-muted fw-semibold">Predefined Job Handler</Form.Label>
+                <Form.Label className="fw-semibold">Action to Execute</Form.Label>
                 <Form.Select
-                  name="jobType"
-                  className="form-select-dark"
-                  value={formik.values.jobType}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  isInvalid={formik.touched.jobType && Boolean(formik.errors.jobType)}
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value)}
                 >
-                  {jobTypes.map((type) => (
-                    <option key={type.key} value={type.key}>
-                      {type.key} ({type.name})
+                  {jobTypes.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.name} ({t.key})
                     </option>
                   ))}
                 </Form.Select>
-                <Form.Text className="text-muted small">Executes pre-registered safe handler.</Form.Text>
               </Form.Group>
             </Col>
+          </Row>
 
+          {/* Schedule Configuration Box */}
+          <div className="border rounded-3 p-3 bg-light mb-3">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <span className="fw-bold">Schedule Configuration</span>
+              <Nav variant="pills" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
+                <Nav.Item>
+                  <Nav.Link eventKey="simple" className="py-1 px-3">
+                    Simple Builder
+                  </Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link eventKey="advanced" className="py-1 px-3">
+                    Custom Cron
+                  </Nav.Link>
+                </Nav.Item>
+              </Nav>
+            </div>
+
+            {activeTab === 'simple' ? (
+              <div>
+                <Row className="g-3 align-items-center mb-3">
+                  <Col md={4}>
+                    <Form.Label className="small text-muted fw-semibold">Frequency</Form.Label>
+                    <Form.Select
+                      value={freqType}
+                      onChange={(e) => setFreqType(e.target.value)}
+                    >
+                      <option value="EVERY_X_MIN">Every X Minutes</option>
+                      <option value="HOURLY">Hourly</option>
+                      <option value="DAILY">Daily</option>
+                      <option value="WEEKLY">Weekly</option>
+                      <option value="MONTHLY">Monthly</option>
+                    </Form.Select>
+                  </Col>
+
+                  {freqType === 'EVERY_X_MIN' && (
+                    <Col md={4}>
+                      <Form.Label className="small text-muted fw-semibold">Minute Interval</Form.Label>
+                      <Form.Select
+                        value={minuteInterval}
+                        onChange={(e) => setMinuteInterval(e.target.value)}
+                      >
+                        <option value="1">Every 1 minute</option>
+                        <option value="5">Every 5 minutes</option>
+                        <option value="10">Every 10 minutes</option>
+                        <option value="15">Every 15 minutes</option>
+                        <option value="30">Every 30 minutes</option>
+                      </Form.Select>
+                    </Col>
+                  )}
+
+                  {(freqType === 'DAILY' || freqType === 'WEEKLY' || freqType === 'MONTHLY') && (
+                    <Col md={4}>
+                      <Form.Label className="small text-muted fw-semibold">Time</Form.Label>
+                      <Form.Control
+                        type="time"
+                        value={selectedTime}
+                        onChange={(e) => setSelectedTime(e.target.value)}
+                      />
+                    </Col>
+                  )}
+
+                  {freqType === 'WEEKLY' && (
+                    <Col md={4}>
+                      <Form.Label className="small text-muted fw-semibold">Day of Week</Form.Label>
+                      <Form.Select
+                        value={selectedDayOfWeek}
+                        onChange={(e) => setSelectedDayOfWeek(e.target.value)}
+                      >
+                        <option value="1">Monday</option>
+                        <option value="2">Tuesday</option>
+                        <option value="3">Wednesday</option>
+                        <option value="4">Thursday</option>
+                        <option value="5">Friday</option>
+                        <option value="6">Saturday</option>
+                        <option value="0">Sunday</option>
+                      </Form.Select>
+                    </Col>
+                  )}
+
+                  {freqType === 'MONTHLY' && (
+                    <Col md={4}>
+                      <Form.Label className="small text-muted fw-semibold">Day of Month</Form.Label>
+                      <Form.Select
+                        value={selectedDayOfMonth}
+                        onChange={(e) => setSelectedDayOfMonth(e.target.value)}
+                      >
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  )}
+                </Row>
+              </div>
+            ) : (
+              <div>
+                <Form.Group className="mb-2">
+                  <Form.Label className="small text-muted fw-semibold">Cron Expression (5 fields)</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="e.g. 0 9 * * *"
+                    className="font-monospace"
+                    value={cronExpression}
+                    onChange={(e) => setCronExpression(e.target.value)}
+                  />
+                  <Form.Text className="text-muted">
+                    Format: <code>minute hour day-of-month month day-of-week</code>
+                  </Form.Text>
+                </Form.Group>
+              </div>
+            )}
+
+            {/* Human Summary Alert */}
+            <Alert variant="info" className="mb-0 py-2 px-3 d-flex align-items-center justify-content-between">
+              <div>
+                <span className="fw-semibold">Schedule Summary:</span>{' '}
+                <span>{cronToHumanReadable(cronExpression)}</span>
+              </div>
+              <code className="text-dark bg-white px-2 py-1 rounded border small">{cronExpression}</code>
+            </Alert>
+          </div>
+
+          <Row className="g-3">
             <Col md={6}>
               <Form.Group>
                 <Form.Label className="small text-muted fw-semibold">Timezone</Form.Label>
                 <Form.Control
                   type="text"
-                  name="timezone"
                   placeholder="Asia/Kolkata"
-                  className="form-control-dark"
-                  value={formik.values.timezone}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  isInvalid={formik.touched.timezone && Boolean(formik.errors.timezone)}
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
                 />
-                <Form.Control.Feedback type="invalid">{formik.errors.timezone}</Form.Control.Feedback>
               </Form.Group>
             </Col>
 
             <Col md={12}>
               <Form.Group>
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <Form.Label className="small text-muted fw-semibold mb-0">Cron Expression</Form.Label>
-                  <Form.Select
-                    size="sm"
-                    className="form-select-dark py-0 px-2"
-                    style={{ width: 'auto', fontSize: '0.8rem' }}
-                    onChange={(e) => {
-                      if (e.target.value) formik.setFieldValue('cronExpression', e.target.value);
-                    }}
-                  >
-                    <option value="">Quick Presets...</option>
-                    {CRON_PRESETS.map((p, i) => (
-                      <option key={i} value={p.value}>{p.label}</option>
-                    ))}
-                  </Form.Select>
-                </div>
-                <Form.Control
-                  type="text"
-                  name="cronExpression"
-                  placeholder="0 9 * * *"
-                  className="form-control-dark font-monospace"
-                  value={formik.values.cronExpression}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  isInvalid={formik.touched.cronExpression && Boolean(formik.errors.cronExpression)}
-                />
-                <Form.Control.Feedback type="invalid">{formik.errors.cronExpression}</Form.Control.Feedback>
-              </Form.Group>
-            </Col>
-
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label className="small text-muted fw-semibold">Job Payload (JSON)</Form.Label>
+                <Form.Label className="small text-muted fw-semibold">Job Parameters / Payload (JSON)</Form.Label>
                 <Form.Control
                   as="textarea"
-                  rows={4}
-                  name="payloadJson"
-                  className="form-control-dark font-monospace"
-                  value={formik.values.payloadJson}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  isInvalid={formik.touched.payloadJson && Boolean(formik.errors.payloadJson)}
+                  rows={3}
+                  className="font-monospace"
+                  value={payloadJson}
+                  onChange={(e) => setPayloadJson(e.target.value)}
                 />
-                <Form.Control.Feedback type="invalid">{formik.errors.payloadJson}</Form.Control.Feedback>
-                <Form.Text className="text-muted small">Parameters passed to the predefined job handler.</Form.Text>
               </Form.Group>
             </Col>
           </Row>
         </Modal.Body>
-        <Modal.Footer className="modal-footer-dark">
-          <Button variant="outline-secondary" onClick={onHide}>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={onHide}>
             Cancel
           </Button>
-          <Button type="submit" className="btn-primary-gradient">
+          <Button variant="primary" type="submit">
             {initialValues ? 'Save Changes' : 'Create Schedule'}
           </Button>
         </Modal.Footer>

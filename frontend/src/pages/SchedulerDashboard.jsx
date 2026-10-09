@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Row, Col, Card, Button, Spinner, Alert } from 'react-bootstrap';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Activity, CheckCircle2, PauseCircle, AlertTriangle } from 'lucide-react';
+import { Plus, RefreshCw, Calendar, CheckCircle2, PauseCircle, AlertTriangle } from 'lucide-react';
 
 import {
   getMetrics,
@@ -153,7 +153,7 @@ export const SchedulerDashboard = () => {
           variant={alertMsg.type}
           dismissible
           onClose={() => setAlertMsg(null)}
-          className="mb-4 bg-opacity-20 border-opacity-30 text-white"
+          className="mb-4 shadow-sm"
         >
           {alertMsg.text}
         </Alert>
@@ -162,75 +162,92 @@ export const SchedulerDashboard = () => {
       {/* Metrics Row */}
       <Row className="g-3 mb-4">
         <Col md={3} sm={6}>
-          <div className="metric-card">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <span className="text-muted small fw-semibold">Total Schedules</span>
-              <Activity size={20} className="text-indigo-400" color="#818cf8" />
-            </div>
-            <div className="metric-value text-white">
-              {isMetricsLoading ? '...' : metrics?.totalJobs || 0}
-            </div>
-          </div>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small fw-semibold text-uppercase">Total Jobs</div>
+                <h3 className="fw-bold mb-0 text-dark">
+                  {isMetricsLoading ? '...' : metrics?.totalJobs || 0}
+                </h3>
+              </div>
+              <div className="p-3 bg-primary bg-opacity-10 text-primary rounded-circle">
+                <Calendar size={22} />
+              </div>
+            </Card.Body>
+          </Card>
         </Col>
 
         <Col md={3} sm={6}>
-          <div className="metric-card">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <span className="text-muted small fw-semibold">Active Schedules</span>
-              <CheckCircle2 size={20} color="#34d399" />
-            </div>
-            <div className="metric-value text-success">
-              {isMetricsLoading ? '...' : metrics?.activeJobs || 0}
-            </div>
-          </div>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small fw-semibold text-uppercase">Active</div>
+                <h3 className="fw-bold mb-0 text-success">
+                  {isMetricsLoading ? '...' : metrics?.activeJobs || 0}
+                </h3>
+              </div>
+              <div className="p-3 bg-success bg-opacity-10 text-success rounded-circle">
+                <CheckCircle2 size={22} />
+              </div>
+            </Card.Body>
+          </Card>
         </Col>
 
         <Col md={3} sm={6}>
-          <div className="metric-card">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <span className="text-muted small fw-semibold">Paused Schedules</span>
-              <PauseCircle size={20} color="#fbbf24" />
-            </div>
-            <div className="metric-value text-warning">
-              {isMetricsLoading ? '...' : metrics?.pausedJobs || 0}
-            </div>
-          </div>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small fw-semibold text-uppercase">Paused</div>
+                <h3 className="fw-bold mb-0 text-warning">
+                  {isMetricsLoading ? '...' : metrics?.pausedJobs || 0}
+                </h3>
+              </div>
+              <div className="p-3 bg-warning bg-opacity-10 text-warning rounded-circle">
+                <PauseCircle size={22} />
+              </div>
+            </Card.Body>
+          </Card>
         </Col>
 
         <Col md={3} sm={6}>
-          <div className="metric-card">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <span className="text-muted small fw-semibold">Failed Executions</span>
-              <AlertTriangle size={20} color="#f87171" />
-            </div>
-            <div className="metric-value text-danger">
-              {isMetricsLoading ? '...' : metrics?.failedLogs || 0}
-            </div>
-          </div>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small fw-semibold text-uppercase">Failures</div>
+                <h3 className="fw-bold mb-0 text-danger">
+                  {isMetricsLoading ? '...' : metrics?.failedLogs || 0}
+                </h3>
+              </div>
+              <div className="p-3 bg-danger bg-opacity-10 text-danger rounded-circle">
+                <AlertTriangle size={22} />
+              </div>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       {/* Header Actions */}
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div>
-          <h4 className="fw-bold mb-1 text-white">Scheduled Jobs</h4>
+          <h4 className="fw-bold mb-1 text-dark">Job Schedules</h4>
           <p className="text-muted small mb-0">
-            Dynamic cron engine backed by PostgreSQL & BullMQ distributed queue.
+            Manage dynamic execution frequency and view real-time logs.
           </p>
         </div>
         <div className="d-flex gap-2">
           <Button
             variant="outline-secondary"
-            className="d-flex align-items-center gap-2 border-opacity-50"
+            className="d-flex align-items-center gap-2"
             onClick={() => refetchJobs()}
           >
             <RefreshCw size={16} /> Refresh
           </Button>
           <Button
-            className="btn-primary-gradient d-flex align-items-center gap-2"
+            variant="primary"
+            className="d-flex align-items-center gap-2 fw-semibold"
             onClick={handleOpenCreateModal}
           >
-            <Plus size={18} /> Create New Job
+            <Plus size={18} /> Schedule New Job
           </Button>
         </div>
       </div>
@@ -239,7 +256,7 @@ export const SchedulerDashboard = () => {
       {isJobsLoading ? (
         <div className="text-center py-5">
           <Spinner animation="border" variant="primary" />
-          <p className="text-muted small mt-2">Loading cron schedules...</p>
+          <p className="text-muted small mt-2">Loading schedules...</p>
         </div>
       ) : (
         <CronJobTable

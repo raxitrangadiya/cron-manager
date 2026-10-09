@@ -4,10 +4,10 @@ import { StatusBadge } from './StatusBadge';
 
 export const CronJobLogModal = ({ show, onHide, logs, isLoading, jobName }) => {
   return (
-    <Modal show={show} onHide={onHide} centered size="lg" contentClassName="modal-content-dark">
-      <Modal.Header closeButton closeVariant="white" className="modal-header-dark">
-        <Modal.Title className="h5 font-semibold">
-          Execution History — <span className="text-info">{jobName || 'Cron Job'}</span>
+    <Modal show={show} onHide={onHide} centered size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title className="h5 fw-bold">
+          Execution History — <span className="text-primary">{jobName || 'Cron Job'}</span>
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
@@ -21,13 +21,13 @@ export const CronJobLogModal = ({ show, onHide, logs, isLoading, jobName }) => {
             No execution logs recorded yet for this job.
           </div>
         ) : (
-          <Table hover className="custom-table mb-0 align-middle">
-            <thead>
+          <Table hover responsive className="align-middle mb-0">
+            <thead className="bg-light">
               <tr>
                 <th>Status</th>
                 <th>Executed At</th>
                 <th>Duration</th>
-                <th>Execution Details</th>
+                <th>Execution Output / Result</th>
               </tr>
             </thead>
             <tbody>
@@ -41,20 +41,20 @@ export const CronJobLogModal = ({ show, onHide, logs, isLoading, jobName }) => {
                   </td>
                   <td>
                     {log.executionTimeMs !== null ? (
-                      <span className="badge bg-dark border border-secondary text-light">
+                      <Badge bg="light" text="dark" className="border">
                         {log.executionTimeMs} ms
-                      </span>
+                      </Badge>
                     ) : (
                       '—'
                     )}
                   </td>
                   <td>
                     {log.status === 'FAILED' ? (
-                      <pre className="text-danger small mb-0 json-viewer">
+                      <pre className="text-danger small mb-0 p-2 bg-light rounded border">
                         {log.errorDetails || 'Execution failed'}
                       </pre>
                     ) : log.result ? (
-                      <pre className="mb-0 json-viewer">
+                      <pre className="text-primary small mb-0 p-2 bg-light rounded border">
                         {JSON.stringify(log.result, null, 2)}
                       </pre>
                     ) : (

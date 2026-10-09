@@ -2,31 +2,31 @@ import React from 'react';
 import { Badge } from 'react-bootstrap';
 
 export const StatusBadge = ({ status }) => {
-  let badgeClass = 'badge-active';
+  let bg = 'success';
 
   switch (status) {
     case 'ACTIVE':
     case 'SUCCESS':
-      badgeClass = 'badge-active';
+      bg = 'success';
       break;
     case 'PAUSED':
-      badgeClass = 'badge-paused';
+      bg = 'warning';
       break;
     case 'DISABLED':
-      badgeClass = 'badge-disabled';
+      bg = 'secondary';
       break;
     case 'FAILED':
-      badgeClass = 'badge-failed-status';
+      bg = 'danger';
       break;
     case 'RUNNING':
-      badgeClass = 'badge-running-status';
+      bg = 'info';
       break;
     default:
-      badgeClass = 'badge-active';
+      bg = 'primary';
   }
 
   return (
-    <Badge className={`px-2.5 py-1.5 rounded-pill font-semibold ${badgeClass}`}>
+    <Badge bg={bg} className="px-2.5 py-1.5 rounded-pill font-semibold">
       {status}
     </Badge>
   );
