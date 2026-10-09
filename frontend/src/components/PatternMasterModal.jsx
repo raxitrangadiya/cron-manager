@@ -1,17 +1,39 @@
 import React, { useState } from 'react';
-import { Modal, Form, Button, Row, Col, Alert } from 'react-bootstrap';
+import { Modal, Form, Button, Row, Col, Alert, Nav } from 'react-bootstrap';
 import { cronToHumanReadable } from '../utils/cronHumanizer';
+
+const MONTH_NAMES = [
+  { val: 1, name: 'January' },
+  { val: 2, name: 'February' },
+  { val: 3, name: 'March' },
+  { val: 4, name: 'April' },
+  { val: 5, name: 'May' },
+  { val: 6, name: 'June' },
+  { val: 7, name: 'July' },
+  { val: 8, name: 'August' },
+  { val: 9, name: 'September' },
+  { val: 10, name: 'October' },
+  { val: 11, name: 'November' },
+  { val: 12, name: 'December' }
+];
 
 export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [scheduleType, setScheduleType] = useState('DAILY');
 
-  // Parameters
+  // Trigger Parameters
   const [intervalMin, setIntervalMin] = useState('15');
   const [timeOfDay, setTimeOfDay] = useState('09:00');
+  const [specificDate, setSpecificDate] = useState('2026-10-15');
   const [selectedDays, setSelectedDays] = useState([1, 2, 3, 4, 5]); // Mon-Fri
   const [dayOfMonth, setDayOfMonth] = useState('1');
+  const [monthOfYear, setMonthOfYear] = useState('1');
+
+  // Relative Position Options (1st, 2nd, 3rd, 4th)
+  const [relativePos, setRelativePos] = useState('1-7'); // '1-7' = 1st, '8-14' = 2nd, '15-21' = 3rd, '22-28' = 4th
+  const [relativeDay, setRelativeDay] = useState('1'); // 1 = Monday
+
   const [errorMsg, setErrorMsg] = useState(null);
 
   const calculateCron = () => {
@@ -20,14 +42,29 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
     const m = parseInt(mStr, 10) || 0;
 
     switch (scheduleType) {
+      case 'ONCE': {
+        if (!specificDate) return '0 9 15 10 *';
+        const d = new Date(specificDate);
+        const day = d.getDate() || 15;
+        const month = d.getMonth() + 1 || 10;
+        return `${m} ${h} ${day} ${month} *`;
+      }
       case 'INTERVAL':
         return `*/${intervalMin} * * * *`;
       case 'DAILY':
         return `${m} ${h} * * *`;
       case 'WEEKLY':
         return `${m} ${h} * * ${selectedDays.join(',') || '1'}`;
-      case 'MONTHLY':
+      case 'MONTHLY_DATE':
         return `${m} ${h} ${dayOfMonth} * *`;
+      case 'MONTHLY_RELATIVE':
+        return `${m} ${h} ${relativePos} * ${relativeDay}`;
+      case 'SEMI_ANNUALLY':
+        return `${m} ${h} ${dayOfMonth} 1,7 *`;
+      case 'YEARLY_DATE':
+        return `${m} ${h} ${dayOfMonth} ${monthOfYear} *`;
+      case 'YEARLY_RELATIVE':
+        return `${m} ${h} ${relativePos} ${monthOfYear} ${relativeDay}`;
       default:
         return '0 9 * * *';
     }
@@ -38,7 +75,7 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
 
   const toggleDay = (dayNum) => {
     if (selectedDays.includes(dayNum)) {
-      if (selectedDays.length === 1) return; // Keep at least 1 day
+      if (selectedDays.length === 1) return;
       setSelectedDays(selectedDays.filter((d) => d !== dayNum));
     } else {
       setSelectedDays([...selectedDays, dayNum].sort());
@@ -65,7 +102,7 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
     <Modal show={show} onHide={onHide} centered size="lg">
       <Modal.Header closeButton>
         <Modal.Title className="h5 fw-bold">
-          Create Schedule Pattern Master (Windows Task Scheduler Style)
+          Create Schedule Pattern Master (Windows Task Scheduler)
         </Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
@@ -78,7 +115,7 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
                 <Form.Label className="fw-semibold">Pattern Name</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="e.g. Workday Morning Run"
+                  placeholder="e.g. Semi-Annual Tax Audit"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -88,15 +125,20 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
 
             <Col md={6}>
               <Form.Group>
-                <Form.Label className="fw-semibold">Trigger Frequency</Form.Label>
+                <Form.Label className="fw-semibold">Recurrence Trigger Type</Form.Label>
                 <Form.Select
                   value={scheduleType}
                   onChange={(e) => setScheduleType(e.target.value)}
                 >
-                  <option value="INTERVAL">Repeat at Minute Interval</option>
+                  <option value="ONCE">One Time / Specific Date</option>
+                  <option value="INTERVAL">Interval (Every X Minutes)</option>
                   <option value="DAILY">Daily (At specific time)</option>
-                  <option value="WEEKLY">Weekly (Specific Days & Time)</option>
-                  <option value="MONTHLY">Monthly (Specific Day of Month)</option>
+                  <option value="WEEKLY">Weekly (Specific Days of Week)</option>
+                  <option value="MONTHLY_DATE">Monthly (On specific Date)</option>
+                  <option value="MONTHLY_RELATIVE">Monthly (On 1st/2nd/3rd Monday...)</option>
+                  <option value="SEMI_ANNUALLY">Semi-Annually (Twice a Year)</option>
+                  <option value="YEARLY_DATE">Annually / Yearly (On specific Date)</option>
+                  <option value="YEARLY_RELATIVE">Annually / Yearly (On Relative Day)</option>
                 </Form.Select>
               </Form.Group>
             </Col>
@@ -106,7 +148,7 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
                 <Form.Label className="small text-muted fw-semibold">Description</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="e.g. Triggers every weekday at 9:00 AM for business reports"
+                  placeholder="e.g. Runs twice a year on the 1st of January and July"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
@@ -114,28 +156,50 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
             </Col>
           </Row>
 
-          {/* Trigger Details Configuration Box */}
+          {/* Windows Task Scheduler Recurrence Box */}
           <div className="border rounded-3 p-3 bg-light mb-3">
-            <h6 className="fw-bold mb-3">Recurrence Settings</h6>
+            <h6 className="fw-bold mb-3">Task Scheduler Recurrence Settings</h6>
+
+            {scheduleType === 'ONCE' && (
+              <Row className="g-3 mb-2">
+                <Col md={6}>
+                  <Form.Label className="small fw-semibold">Execution Date</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={specificDate}
+                    onChange={(e) => setSpecificDate(e.target.value)}
+                  />
+                </Col>
+                <Col md={6}>
+                  <Form.Label className="small fw-semibold">Execution Time</Form.Label>
+                  <Form.Control
+                    type="time"
+                    value={timeOfDay}
+                    onChange={(e) => setTimeOfDay(e.target.value)}
+                  />
+                </Col>
+              </Row>
+            )}
 
             {scheduleType === 'INTERVAL' && (
               <Form.Group className="mb-2">
-                <Form.Label className="small fw-semibold">Repeat Every</Form.Label>
+                <Form.Label className="small fw-semibold">Repeat Task Every</Form.Label>
                 <Form.Select
                   value={intervalMin}
                   onChange={(e) => setIntervalMin(e.target.value)}
-                  style={{ maxWidth: '200px' }}
+                  style={{ maxWidth: '250px' }}
                 >
                   <option value="1">1 Minute</option>
                   <option value="5">5 Minutes</option>
                   <option value="10">10 Minutes</option>
                   <option value="15">15 Minutes</option>
                   <option value="30">30 Minutes</option>
+                  <option value="60">1 Hour (60 Mins)</option>
                 </Form.Select>
               </Form.Group>
             )}
 
-            {(scheduleType === 'DAILY' || scheduleType === 'WEEKLY' || scheduleType === 'MONTHLY') && (
+            {scheduleType !== 'ONCE' && scheduleType !== 'INTERVAL' && (
               <Form.Group className="mb-3">
                 <Form.Label className="small fw-semibold">Start Time</Form.Label>
                 <Form.Control
@@ -174,21 +238,87 @@ export const PatternMasterModal = ({ show, onHide, onSubmit }) => {
               </Form.Group>
             )}
 
-            {scheduleType === 'MONTHLY' && (
-              <Form.Group className="mb-2">
-                <Form.Label className="small fw-semibold">Day of the Month</Form.Label>
-                <Form.Select
-                  value={dayOfMonth}
-                  onChange={(e) => setDayOfMonth(e.target.value)}
-                  style={{ maxWidth: '200px' }}
-                >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
+            {(scheduleType === 'MONTHLY_DATE' || scheduleType === 'SEMI_ANNUALLY' || scheduleType === 'YEARLY_DATE') && (
+              <Row className="g-3 mb-2">
+                <Col md={6}>
+                  <Form.Label className="small fw-semibold">Day of Month</Form.Label>
+                  <Form.Select
+                    value={dayOfMonth}
+                    onChange={(e) => setDayOfMonth(e.target.value)}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+
+                {scheduleType === 'YEARLY_DATE' && (
+                  <Col md={6}>
+                    <Form.Label className="small fw-semibold">Month</Form.Label>
+                    <Form.Select
+                      value={monthOfYear}
+                      onChange={(e) => setMonthOfYear(e.target.value)}
+                    >
+                      {MONTH_NAMES.map((m) => (
+                        <option key={m.val} value={m.val}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                )}
+              </Row>
+            )}
+
+            {(scheduleType === 'MONTHLY_RELATIVE' || scheduleType === 'YEARLY_RELATIVE') && (
+              <Row className="g-3 mb-2">
+                <Col md={4}>
+                  <Form.Label className="small fw-semibold">Position</Form.Label>
+                  <Form.Select
+                    value={relativePos}
+                    onChange={(e) => setRelativePos(e.target.value)}
+                  >
+                    <option value="1-7">First (1st)</option>
+                    <option value="8-14">Second (2nd)</option>
+                    <option value="15-21">Third (3rd)</option>
+                    <option value="22-28">Fourth (4th)</option>
+                  </Form.Select>
+                </Col>
+
+                <Col md={4}>
+                  <Form.Label className="small fw-semibold">Day of Week</Form.Label>
+                  <Form.Select
+                    value={relativeDay}
+                    onChange={(e) => setRelativeDay(e.target.value)}
+                  >
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="0">Sunday</option>
+                  </Form.Select>
+                </Col>
+
+                {scheduleType === 'YEARLY_RELATIVE' && (
+                  <Col md={4}>
+                    <Form.Label className="small fw-semibold">Month</Form.Label>
+                    <Form.Select
+                      value={monthOfYear}
+                      onChange={(e) => setMonthOfYear(e.target.value)}
+                    >
+                      {MONTH_NAMES.map((m) => (
+                        <option key={m.val} value={m.val}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                )}
+              </Row>
             )}
 
             <Alert variant="info" className="mb-0 mt-3 py-2 px-3 d-flex align-items-center justify-content-between">

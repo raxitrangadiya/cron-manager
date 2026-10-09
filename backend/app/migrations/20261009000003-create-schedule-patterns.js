@@ -18,7 +18,7 @@ module.exports = {
         allowNull: true
       },
       scheduleType: {
-        type: Sequelize.ENUM('INTERVAL', 'DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'),
+        type: Sequelize.STRING,
         allowNull: false,
         defaultValue: 'DAILY'
       },
@@ -56,7 +56,7 @@ module.exports = {
       }
     });
 
-    // Seed default presets (Windows Task Scheduler Style Default Masters)
+    // Seed comprehensive default presets (Windows Task Scheduler Style Default Masters)
     await queryInterface.bulkInsert('schedule_patterns', [
       {
         id: '10000000-0000-0000-0000-000000000001',
@@ -96,10 +96,45 @@ module.exports = {
         id: '10000000-0000-0000-0000-000000000004',
         name: 'Monthly Payroll / Audit Run (1st of Month)',
         description: 'Triggers on the 1st of every month at midnight',
-        scheduleType: 'MONTHLY',
+        scheduleType: 'MONTHLY_DATE',
         timeOfDay: '00:00',
         dayOfMonth: 1,
         cronExpression: '0 0 1 * *',
+        isPreset: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: '10000000-0000-0000-0000-000000000005',
+        name: 'Semi-Annual Financial Review (Jan & Jul 1st)',
+        description: 'Triggers twice a year on January 1st and July 1st at 9:00 AM',
+        scheduleType: 'SEMI_ANNUALLY',
+        timeOfDay: '09:00',
+        dayOfMonth: 1,
+        cronExpression: '0 9 1 1,7 *',
+        isPreset: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: '10000000-0000-0000-0000-000000000006',
+        name: 'Annual Tax Compliance (March 31st)',
+        description: 'Triggers once a year on March 31st at 9:00 AM',
+        scheduleType: 'YEARLY_DATE',
+        timeOfDay: '09:00',
+        dayOfMonth: 31,
+        cronExpression: '0 9 31 3 *',
+        isPreset: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: '10000000-0000-0000-0000-000000000007',
+        name: 'Yearly Kickoff (First Monday of January)',
+        description: 'Triggers every year on the first Monday of January at 9:00 AM',
+        scheduleType: 'YEARLY_RELATIVE',
+        timeOfDay: '09:00',
+        cronExpression: '0 9 1-7 1 1',
         isPreset: true,
         createdAt: new Date(),
         updatedAt: new Date()

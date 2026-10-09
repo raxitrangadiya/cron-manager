@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     scheduleType: {
-      type: DataTypes.ENUM('INTERVAL', 'DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'),
+      type: DataTypes.STRING, // Supports ONCE, INTERVAL, DAILY, WEEKLY, MONTHLY_DATE, MONTHLY_RELATIVE, SEMI_ANNUALLY, YEARLY_DATE, YEARLY_RELATIVE, CUSTOM
       allowNull: false,
       defaultValue: 'DAILY'
     },
@@ -25,15 +25,15 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     timeOfDay: {
-      type: DataTypes.STRING, // HH:mm (e.g. 09:00)
+      type: DataTypes.STRING,
       allowNull: true
     },
     daysOfWeek: {
-      type: DataTypes.JSONB, // Array of 0-6 (Sunday to Saturday)
+      type: DataTypes.JSONB,
       allowNull: true
     },
     dayOfMonth: {
-      type: DataTypes.INTEGER, // 1-31
+      type: DataTypes.INTEGER,
       allowNull: true
     },
     cronExpression: {
