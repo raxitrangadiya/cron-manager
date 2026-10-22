@@ -61,6 +61,10 @@ services:
       - "3000:3000"
     environment:
       - VITE_API_URL=http://localhost:5000
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
     depends_on:
       - backend
 

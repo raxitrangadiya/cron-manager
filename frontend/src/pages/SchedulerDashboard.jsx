@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Row, Col, Card, Button, Spinner, Alert, Nav, Form, InputGroup, Badge } from 'react-bootstrap';
+import { Row, Col, Card, Button, Spinner, Alert, Nav, Form, InputGroup, Badge, Toast, ToastContainer } from 'react-bootstrap';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -12,6 +12,7 @@ import {
   Search,
   Filter,
   Activity,
+  Zap,
   CheckCheck
 } from 'lucide-react';
 
@@ -55,8 +56,14 @@ export const SchedulerDashboard = () => {
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'ACTIVE', 'PAUSED'
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' or specific jobType
 
-  const [alertMsg, setAlertMsg] = useState(null);
+  // Toast Notification System
+  const [toast, setToast] = useState({ show: false, title: '', message: '', variant: 'success' });
+
+  const showToast = (message, title = 'Notification', variant = 'success') => {
+    setToast({ show: true, title, message, variant });
+  };
 
   // Queries
   const { data: metrics, isLoading: isMetricsLoading } = useQuery({
@@ -96,6 +103,10 @@ export const SchedulerDashboard = () => {
       if (statusFilter !== 'ALL' && job.status !== statusFilter) {
         return false;
       }
+      // Type filter
+      if (typeFilter !== 'ALL' && job.jobType !== typeFilter) {
+        return false;
+      }
       // Search filter
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -107,7 +118,7 @@ export const SchedulerDashboard = () => {
       }
       return true;
     });
-  }, [jobs, searchTerm, statusFilter]);
+  }, [jobs, searchTerm, statusFilter, typeFilter]);
 
   // Mutations
   const createMutation = useMutation({
@@ -117,10 +128,10 @@ export const SchedulerDashboard = () => {
       queryClient.invalidateQueries(['metrics']);
       setShowModal(false);
       setPreselectedPattern(null);
-      setAlertMsg({ type: 'success', text: `Scheduled Job "${data.name}" created successfully!` });
+      showToast(`Scheduled Job "${data.name}" registered and running!`, 'Success', 'success');
     },
     onError: (err) => {
-      setAlertMsg({ type: 'danger', text: err.response?.data?.message || err.message });
+      showToast(err.response?.data?.message || err.message, 'Error Creating Job', 'danger');
     }
   });
 
@@ -132,10 +143,10 @@ export const SchedulerDashboard = () => {
       setShowModal(false);
       setEditingJob(null);
       setPreselectedPattern(null);
-      setAlertMsg({ type: 'success', text: `Job "${data.name}" updated successfully.` });
+      showToast(`Job "${data.name}" updated successfully.`, 'Updated', 'success');
     },
     onError: (err) => {
-      setAlertMsg({ type: 'danger', text: err.response?.data?.message || err.message });
+      showToast(err.response?.data?.message || err.message, 'Error Updating Job', 'danger');
     }
   });
 
@@ -144,6 +155,10 @@ export const SchedulerDashboard = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
+      showToast('Scheduled task paused.', 'Paused', 'warning');
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.message || err.message, 'Error Pausing Job', 'danger');
     }
   });
 
@@ -152,6 +167,10 @@ export const SchedulerDashboard = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
+      showToast('Scheduled task resumed active state.', 'Active', 'success');
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.message || err.message, 'Error Resuming Job', 'danger');
     }
   });
 
@@ -160,10 +179,10 @@ export const SchedulerDashboard = () => {
     onSuccess: (res) => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
-      setAlertMsg({ type: 'info', text: res.message || 'Job triggered successfully.' });
+      showToast(res.message || 'Job queued for immediate execution!', 'Triggered', 'info');
     },
     onError: (err) => {
-      setAlertMsg({ type: 'danger', text: err.response?.data?.message || err.message });
+      showToast(err.response?.data?.message || err.message, 'Trigger Failed', 'danger');
     }
   });
 
@@ -172,7 +191,10 @@ export const SchedulerDashboard = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
-      setAlertMsg({ type: 'warning', text: 'Job deleted successfully.' });
+      showToast('Job schedule deleted from system.', 'Deleted', 'warning');
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.message || err.message, 'Error Deleting', 'danger');
     }
   });
 
@@ -181,10 +203,10 @@ export const SchedulerDashboard = () => {
     onSuccess: (data) => {
       queryClient.invalidateQueries(['schedulePatterns']);
       setShowPatternModal(false);
-      setAlertMsg({ type: 'success', text: `Schedule Pattern Master "${data.name}" created!` });
+      showToast(`Schedule Pattern Master "${data.name}" created!`, 'Pattern Saved', 'success');
     },
     onError: (err) => {
-      setAlertMsg({ type: 'danger', text: err.response?.data?.message || err.message });
+      showToast(err.response?.data?.message || err.message, 'Error Saving Pattern', 'danger');
     }
   });
 
@@ -192,7 +214,10 @@ export const SchedulerDashboard = () => {
     mutationFn: deleteSchedulePattern,
     onSuccess: () => {
       queryClient.invalidateQueries(['schedulePatterns']);
-      setAlertMsg({ type: 'warning', text: 'Schedule pattern template deleted.' });
+      showToast('Schedule pattern template deleted.', 'Deleted', 'warning');
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.message || err.message, 'Error Deleting Pattern', 'danger');
     }
   });
 
@@ -212,6 +237,7 @@ export const SchedulerDashboard = () => {
   const handleApplyPatternToJob = (pattern) => {
     setEditingJob(null);
     setPreselectedPattern(pattern);
+    setActiveMainTab('jobs');
     setShowModal(true);
   };
 
@@ -232,17 +258,24 @@ export const SchedulerDashboard = () => {
 
   return (
     <div>
-      {/* Alert Notice */}
-      {alertMsg && (
-        <Alert
-          variant={alertMsg.type}
-          dismissible
-          onClose={() => setAlertMsg(null)}
-          className="mb-4 shadow-sm border py-2.5 px-3"
+      {/* Toast Notification Container */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 9999 }}>
+        <Toast
+          onClose={() => setToast({ ...toast, show: false })}
+          show={toast.show}
+          delay={4000}
+          autohide
+          bg="white"
+          className="border shadow-sm"
         >
-          {alertMsg.text}
-        </Alert>
-      )}
+          <Toast.Header>
+            <div className={`p-1 rounded-circle bg-${toast.variant} me-2`} style={{ width: '8px', height: '8px' }}></div>
+            <strong className="me-auto text-dark small">{toast.title}</strong>
+            <small className="text-muted">Just now</small>
+          </Toast.Header>
+          <Toast.Body className="small text-secondary">{toast.message}</Toast.Body>
+        </Toast>
+      </ToastContainer>
 
       {/* Header Banner */}
       <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
@@ -390,6 +423,20 @@ export const SchedulerDashboard = () => {
               <option value="ALL">All Statuses</option>
               <option value="ACTIVE">Active Only</option>
               <option value="PAUSED">Paused Only</option>
+            </Form.Select>
+
+            <Form.Select
+              size="sm"
+              style={{ width: 'auto' }}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="ALL">All Task Types</option>
+              {jobTypes.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.name}
+                </option>
+              ))}
             </Form.Select>
           </div>
         )}
