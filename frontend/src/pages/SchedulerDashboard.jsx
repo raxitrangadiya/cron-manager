@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { Row, Col, Card, Button, Spinner, Alert, Nav } from 'react-bootstrap';
+import React, { useState, useMemo } from 'react';
+import { Row, Col, Card, Button, Spinner, Alert, Nav, Form, InputGroup, Badge } from 'react-bootstrap';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Calendar, CheckCircle2, PauseCircle, AlertTriangle, Layers } from 'lucide-react';
+import {
+  Plus,
+  RefreshCw,
+  Calendar,
+  CheckCircle2,
+  PauseCircle,
+  AlertTriangle,
+  Layers,
+  Search,
+  Filter,
+  Activity,
+  CheckCheck
+} from 'lucide-react';
 
 import {
   getMetrics,
@@ -32,12 +44,17 @@ export const SchedulerDashboard = () => {
 
   const [showModal, setShowModal] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [preselectedPattern, setPreselectedPattern] = useState(null);
 
   const [showPatternModal, setShowPatternModal] = useState(false);
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [selectedJobName, setSelectedJobName] = useState('');
+
+  // Filters & Search
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'ACTIVE', 'PAUSED'
 
   const [alertMsg, setAlertMsg] = useState(null);
 
@@ -48,7 +65,7 @@ export const SchedulerDashboard = () => {
     refetchInterval: 5000
   });
 
-  const { data: jobs, isLoading: isJobsLoading, refetch: refetchJobs } = useQuery({
+  const { data: jobs, isLoading: isJobsLoading, refetch: refetchJobs, isRefetching } = useQuery({
     queryKey: ['jobs'],
     queryFn: getJobs,
     refetchInterval: 5000
@@ -71,6 +88,27 @@ export const SchedulerDashboard = () => {
     refetchInterval: 3000
   });
 
+  // Client-side filtering of jobs
+  const filteredJobs = useMemo(() => {
+    if (!jobs) return [];
+    return jobs.filter((job) => {
+      // Status filter
+      if (statusFilter !== 'ALL' && job.status !== statusFilter) {
+        return false;
+      }
+      // Search filter
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        const matchesName = job.name?.toLowerCase().includes(term);
+        const matchesId = job.id?.toLowerCase().includes(term);
+        const matchesType = job.jobType?.toLowerCase().includes(term);
+        const matchesCron = job.cronExpression?.toLowerCase().includes(term);
+        return matchesName || matchesId || matchesType || matchesCron;
+      }
+      return true;
+    });
+  }, [jobs, searchTerm, statusFilter]);
+
   // Mutations
   const createMutation = useMutation({
     mutationFn: createJob,
@@ -78,6 +116,7 @@ export const SchedulerDashboard = () => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
       setShowModal(false);
+      setPreselectedPattern(null);
       setAlertMsg({ type: 'success', text: `Scheduled Job "${data.name}" created successfully!` });
     },
     onError: (err) => {
@@ -92,6 +131,7 @@ export const SchedulerDashboard = () => {
       queryClient.invalidateQueries(['metrics']);
       setShowModal(false);
       setEditingJob(null);
+      setPreselectedPattern(null);
       setAlertMsg({ type: 'success', text: `Job "${data.name}" updated successfully.` });
     },
     onError: (err) => {
@@ -121,6 +161,9 @@ export const SchedulerDashboard = () => {
       queryClient.invalidateQueries(['jobs']);
       queryClient.invalidateQueries(['metrics']);
       setAlertMsg({ type: 'info', text: res.message || 'Job triggered successfully.' });
+    },
+    onError: (err) => {
+      setAlertMsg({ type: 'danger', text: err.response?.data?.message || err.message });
     }
   });
 
@@ -149,18 +192,26 @@ export const SchedulerDashboard = () => {
     mutationFn: deleteSchedulePattern,
     onSuccess: () => {
       queryClient.invalidateQueries(['schedulePatterns']);
-      setAlertMsg({ type: 'warning', text: 'Schedule pattern master deleted.' });
+      setAlertMsg({ type: 'warning', text: 'Schedule pattern template deleted.' });
     }
   });
 
   // Handlers
   const handleOpenCreateModal = () => {
     setEditingJob(null);
+    setPreselectedPattern(null);
     setShowModal(true);
   };
 
   const handleOpenEditModal = (job) => {
     setEditingJob(job);
+    setPreselectedPattern(null);
+    setShowModal(true);
+  };
+
+  const handleApplyPatternToJob = (pattern) => {
+    setEditingJob(null);
+    setPreselectedPattern(pattern);
     setShowModal(true);
   };
 
@@ -173,7 +224,7 @@ export const SchedulerDashboard = () => {
   };
 
   const handleViewLogs = (jobId) => {
-    const job = jobs.find((j) => j.id === jobId);
+    const job = jobs?.find((j) => j.id === jobId);
     setSelectedJobId(jobId);
     setSelectedJobName(job ? job.name : '');
     setShowLogModal(true);
@@ -187,136 +238,185 @@ export const SchedulerDashboard = () => {
           variant={alertMsg.type}
           dismissible
           onClose={() => setAlertMsg(null)}
-          className="mb-4 shadow-sm"
+          className="mb-4 shadow-sm border py-2.5 px-3"
         >
           {alertMsg.text}
         </Alert>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="d-flex align-items-center justify-content-between mb-4 border-bottom pb-2">
-        <Nav variant="tabs" activeKey={activeMainTab} onSelect={(k) => setActiveMainTab(k)}>
+      {/* Header Banner */}
+      <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+        <div>
+          <h4 className="fw-bold text-dark mb-1">Dynamic Task Scheduler</h4>
+          <p className="text-muted small mb-0">
+            Automate recurring workloads, configure Windows Task Scheduler-style recurrence, and monitor execution health.
+          </p>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            className="d-flex align-items-center gap-1.5 py-1.5 px-3"
+            onClick={() => refetchJobs()}
+            disabled={isRefetching}
+          >
+            <RefreshCw size={14} className={isRefetching ? 'spin' : ''} />
+            <span>Refresh</span>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            className="d-flex align-items-center gap-1.5 py-1.5 px-3 fw-medium"
+            onClick={handleOpenCreateModal}
+          >
+            <Plus size={15} />
+            <span>Schedule New Job</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Metric Cards Row */}
+      <Row className="g-3 mb-4">
+        <Col md={3} sm={6}>
+          <div className="metric-card">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-muted small fw-semibold text-uppercase tracking-wider">Total Schedules</span>
+              <div className="p-2 bg-primary bg-opacity-10 text-primary rounded-circle">
+                <Calendar size={18} />
+              </div>
+            </div>
+            <div className="metric-value">
+              {isMetricsLoading ? '—' : metrics?.totalJobs || 0}
+            </div>
+            <div className="text-muted small mt-1">Configured in registry</div>
+          </div>
+        </Col>
+
+        <Col md={3} sm={6}>
+          <div className="metric-card">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-muted small fw-semibold text-uppercase tracking-wider">Active Jobs</span>
+              <div className="p-2 bg-success bg-opacity-10 text-success rounded-circle">
+                <CheckCircle2 size={18} />
+              </div>
+            </div>
+            <div className="metric-value text-success">
+              {isMetricsLoading ? '—' : metrics?.activeJobs || 0}
+            </div>
+            <div className="text-muted small mt-1">Currently running on schedule</div>
+          </div>
+        </Col>
+
+        <Col md={3} sm={6}>
+          <div className="metric-card">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-muted small fw-semibold text-uppercase tracking-wider">Paused</span>
+              <div className="p-2 bg-warning bg-opacity-10 text-warning rounded-circle">
+                <PauseCircle size={18} />
+              </div>
+            </div>
+            <div className="metric-value text-warning">
+              {isMetricsLoading ? '—' : metrics?.pausedJobs || 0}
+            </div>
+            <div className="text-muted small mt-1">Temporarily suspended</div>
+          </div>
+        </Col>
+
+        <Col md={3} sm={6}>
+          <div className="metric-card">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-muted small fw-semibold text-uppercase tracking-wider">Total Executions</span>
+              <div className="p-2 bg-info bg-opacity-10 text-info rounded-circle">
+                <Activity size={18} />
+              </div>
+            </div>
+            <div className="metric-value text-primary">
+              {isMetricsLoading ? '—' : metrics?.totalLogs || 0}
+            </div>
+            <div className="text-muted small mt-1">
+              <span className="text-success fw-medium">{metrics?.successLogs || 0} successful</span>
+              {metrics?.failedLogs > 0 && <span className="text-danger ms-1">({metrics.failedLogs} failed)</span>}
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      {/* Navigation Tabs & Search Toolbar */}
+      <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-3 pb-2 border-bottom">
+        <Nav variant="pills" activeKey={activeMainTab} onSelect={(k) => setActiveMainTab(k)}>
           <Nav.Item>
-            <Nav.Link eventKey="jobs" className="fw-semibold px-4">
-              <Calendar size={16} className="me-2" /> Scheduled Jobs
+            <Nav.Link eventKey="jobs" className="d-flex align-items-center gap-2">
+              <Calendar size={15} />
+              <span>Scheduled Jobs</span>
+              <Badge bg="light" text="dark" className="border ms-1 small">
+                {jobs?.length || 0}
+              </Badge>
             </Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="patterns" className="fw-semibold px-4">
-              <Layers size={16} className="me-2" /> Schedule Pattern Master (Task Scheduler)
+            <Nav.Link eventKey="patterns" className="d-flex align-items-center gap-2">
+              <Layers size={15} />
+              <span>Schedule Pattern Master</span>
+              <Badge bg="light" text="dark" className="border ms-1 small">
+                {schedulePatterns?.length || 0}
+              </Badge>
             </Nav.Link>
           </Nav.Item>
         </Nav>
 
-        {activeMainTab === 'jobs' ? (
-          <div className="d-flex gap-2">
-            <Button
-              variant="outline-secondary"
+        {activeMainTab === 'jobs' && (
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <div style={{ minWidth: '220px' }}>
+              <InputGroup size="sm">
+                <InputGroup.Text className="bg-white border-end-0 text-muted">
+                  <Search size={14} />
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  placeholder="Search jobs..."
+                  className="border-start-0 ps-0"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </InputGroup>
+            </div>
+
+            <Form.Select
               size="sm"
-              className="d-flex align-items-center gap-2"
-              onClick={() => refetchJobs()}
+              style={{ width: 'auto' }}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <RefreshCw size={14} /> Refresh
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              className="d-flex align-items-center gap-2 fw-semibold"
-              onClick={handleOpenCreateModal}
-            >
-              <Plus size={16} /> Schedule New Job
-            </Button>
+              <option value="ALL">All Statuses</option>
+              <option value="ACTIVE">Active Only</option>
+              <option value="PAUSED">Paused Only</option>
+            </Form.Select>
           </div>
-        ) : (
+        )}
+
+        {activeMainTab === 'patterns' && (
           <Button
             variant="primary"
             size="sm"
-            className="d-flex align-items-center gap-2 fw-semibold"
+            className="d-flex align-items-center gap-1.5 py-1.5 px-3 fw-medium ms-auto"
             onClick={() => setShowPatternModal(true)}
           >
-            <Plus size={16} /> Create Pattern Master
+            <Plus size={15} />
+            <span>Create Pattern Master</span>
           </Button>
         )}
       </div>
 
       {activeMainTab === 'jobs' ? (
         <>
-          {/* Metrics Row */}
-          <Row className="g-3 mb-4">
-            <Col md={3} sm={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Body className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small fw-semibold text-uppercase">Total Jobs</div>
-                    <h3 className="fw-bold mb-0 text-dark">
-                      {isMetricsLoading ? '...' : metrics?.totalJobs || 0}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-primary bg-opacity-10 text-primary rounded-circle">
-                    <Calendar size={22} />
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-
-            <Col md={3} sm={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Body className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small fw-semibold text-uppercase">Active</div>
-                    <h3 className="fw-bold mb-0 text-success">
-                      {isMetricsLoading ? '...' : metrics?.activeJobs || 0}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-success bg-opacity-10 text-success rounded-circle">
-                    <CheckCircle2 size={22} />
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-
-            <Col md={3} sm={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Body className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small fw-semibold text-uppercase">Paused</div>
-                    <h3 className="fw-bold mb-0 text-warning">
-                      {isMetricsLoading ? '...' : metrics?.pausedJobs || 0}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-warning bg-opacity-10 text-warning rounded-circle">
-                    <PauseCircle size={22} />
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-
-            <Col md={3} sm={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Body className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small fw-semibold text-uppercase">Failures</div>
-                    <h3 className="fw-bold mb-0 text-danger">
-                      {isMetricsLoading ? '...' : metrics?.failedLogs || 0}
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-danger bg-opacity-10 text-danger rounded-circle">
-                    <AlertTriangle size={22} />
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-          </Row>
-
-          {/* Main Table */}
           {isJobsLoading ? (
-            <div className="text-center py-5">
+            <div className="text-center py-5 bg-white border rounded-3">
               <Spinner animation="border" variant="primary" />
               <p className="text-muted small mt-2">Loading schedules...</p>
             </div>
           ) : (
             <CronJobTable
-              jobs={jobs || []}
+              jobs={filteredJobs}
               onEdit={handleOpenEditModal}
               onPause={(id) => pauseMutation.mutate(id)}
               onResume={(id) => resumeMutation.mutate(id)}
@@ -327,27 +427,27 @@ export const SchedulerDashboard = () => {
                 }
               }}
               onViewLogs={handleViewLogs}
+              onCreateNew={handleOpenCreateModal}
             />
           )}
         </>
       ) : (
         <>
-          <div className="mb-4">
-            <h5 className="fw-bold mb-1 text-dark">Schedule Pattern Master Repository</h5>
+          <div className="mb-3">
+            <h6 className="fw-bold mb-1 text-dark">Schedule Pattern Master Catalog</h6>
             <p className="text-muted small mb-0">
-              Configure and manage reusable, Windows Task Scheduler-style recurrence patterns for end users.
+              Pick a pre-configured Windows Task Scheduler recurrence pattern or create a new custom template for one-click assignment.
             </p>
           </div>
           <PatternMasterList
             patterns={schedulePatterns}
             onDelete={(id) => {
-              if (window.confirm('Are you sure you want to delete this custom pattern master?')) {
+              if (window.confirm('Are you sure you want to delete this custom pattern template?')) {
                 deletePatternMutation.mutate(id);
               }
             }}
-            onApplyPattern={(pattern) => {
-              setShowModal(true);
-            }}
+            onApplyPattern={handleApplyPatternToJob}
+            onCreateNew={() => setShowPatternModal(true)}
           />
         </>
       )}
@@ -358,11 +458,13 @@ export const SchedulerDashboard = () => {
         onHide={() => {
           setShowModal(false);
           setEditingJob(null);
+          setPreselectedPattern(null);
         }}
         onSubmit={handleFormSubmit}
         jobTypes={jobTypes}
         schedulePatterns={schedulePatterns}
         initialValues={editingJob}
+        preselectedPattern={preselectedPattern}
       />
 
       {/* Create Pattern Master Modal */}

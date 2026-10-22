@@ -17,22 +17,9 @@ export function cronToHumanReadable(cronStr) {
 
   const formattedTime = formatTime(hour, min);
 
-  // Once / One Time: M H D Mo *
-  if (!min.includes('*') && !hour.includes('*') && !dayMonth.includes('*') && !month.includes('*') && dayWeek === '*') {
-    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const mName = monthNames[parseInt(month, 10)] || `Month ${month}`;
-    return `Once on ${mName} ${getOrdinalSuffix(parseInt(dayMonth, 10))} at ${formattedTime}`;
-  }
-
-  // Semi-Annually (Every 6 months): M H D 1,7 *
+  // Semi-Annually (Every 6 months): M H D 1,7 * or 6,12
   if (month === '1,7' || month === '6,12') {
     return `Semi-Annually on the ${getOrdinalSuffix(parseInt(dayMonth, 10))} at ${formattedTime}`;
-  }
-
-  // Annually / Yearly: M H D Mo *
-  if (!min.includes('*') && !hour.includes('*') && !dayMonth.includes('*') && !month.includes('*') && dayWeek === '*') {
-    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `Annually on ${monthNames[parseInt(month, 10)]} ${getOrdinalSuffix(parseInt(dayMonth, 10))} at ${formattedTime}`;
   }
 
   // Annually Relative: e.g. 0 9 1-7 1 1 (First Mon of Jan)
@@ -51,6 +38,18 @@ export function cronToHumanReadable(cronStr) {
     const dName = dayNames[parseInt(dayWeek, 10) % 7];
     const pos = getRelativePositionLabel(dayMonth);
     return `Monthly on the ${pos} ${dName} at ${formattedTime}`;
+  }
+
+  // Annually / Specific Month & Date: M H D Mo *
+  if (!min.includes('*') && !hour.includes('*') && !dayMonth.includes('*') && !month.includes('*') && dayWeek === '*') {
+    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const mName = monthNames[parseInt(month, 10)] || `Month ${month}`;
+    return `Annually on ${mName} ${getOrdinalSuffix(parseInt(dayMonth, 10))} at ${formattedTime}`;
+  }
+
+  // Weekdays Only: M H * * 1-5
+  if (!min.includes('*') && !hour.includes('*') && dayMonth === '*' && month === '*' && (dayWeek === '1-5' || dayWeek === 'MON-FRI')) {
+    return `Every weekday (Mon - Fri) at ${formattedTime}`;
   }
 
   // Every X minutes: */X * * * *
@@ -98,17 +97,16 @@ function formatTime(hStr, mStr) {
   const m = parseInt(mStr, 10);
   const period = h >= 12 ? 'PM' : 'AM';
   const displayH = h % 12 === 0 ? 12 : h % 12;
-  const displayM = m < 10 ? `0${m}` : m;
+  const displayM = String(m).padStart(2, '0');
   return `${displayH}:${displayM} ${period}`;
 }
 
-function getOrdinalSuffix(d) {
-  if (isNaN(d)) return '';
-  if (d > 3 && d < 21) return `${d}th`;
-  switch (d % 10) {
-    case 1:  return `${d}st`;
-    case 2:  return `${d}nd`;
-    case 3:  return `${d}rd`;
-    default: return `${d}th`;
-  }
+function getOrdinalSuffix(num) {
+  if (!num || isNaN(num)) return '';
+  const j = num % 10;
+  const k = num % 100;
+  if (j === 1 && k !== 11) return `${num}st`;
+  if (j === 2 && k !== 12) return `${num}nd`;
+  if (j === 3 && k !== 13) return `${num}rd`;
+  return `${num}th`;
 }

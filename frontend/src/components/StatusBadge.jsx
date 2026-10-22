@@ -1,33 +1,32 @@
 import React from 'react';
-import { Badge } from 'react-bootstrap';
 
 export const StatusBadge = ({ status }) => {
-  let bg = 'success';
+  let badgeClass = 'badge-soft-neutral';
 
   switch (status) {
     case 'ACTIVE':
     case 'SUCCESS':
-      bg = 'success';
+    case 'COMPLETED':
+      badgeClass = 'badge-soft-success';
       break;
     case 'PAUSED':
-      bg = 'warning';
-      break;
-    case 'DISABLED':
-      bg = 'secondary';
+      badgeClass = 'badge-soft-warning';
       break;
     case 'FAILED':
-      bg = 'danger';
+    case 'ERROR':
+      badgeClass = 'badge-soft-danger';
       break;
     case 'RUNNING':
-      bg = 'info';
+      badgeClass = 'badge-soft-info';
       break;
+    case 'DISABLED':
     default:
-      bg = 'primary';
+      badgeClass = 'badge-soft-neutral';
   }
 
   return (
-    <Badge bg={bg} className="px-2.5 py-1.5 rounded-pill font-semibold">
+    <span className={`badge ${badgeClass} px-2.5 py-1 rounded-pill small`}>
       {status}
-    </Badge>
+    </span>
   );
 };

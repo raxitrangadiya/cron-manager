@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Button, Row, Col, Alert, Nav } from 'react-bootstrap';
+import { Modal, Form, Button, Row, Col, Alert, Nav, Badge } from 'react-bootstrap';
 import { cronToHumanReadable } from '../utils/cronHumanizer';
+import cronParser from 'cron-parser';
+import { Clock, Calendar, Sparkles } from 'lucide-react';
 
 export const CronJobModal = ({
   show,
@@ -8,9 +10,10 @@ export const CronJobModal = ({
   onSubmit,
   jobTypes = [],
   schedulePatterns = [],
-  initialValues = null
+  initialValues = null,
+  preselectedPattern = null
 }) => {
-  const [activeTab, setActiveTab] = useState('simple'); // Default to simple builder for end users
+  const [activeTab, setActiveTab] = useState('simple'); // 'simple', 'pattern', or 'advanced'
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
 
   // General Form Fields
@@ -40,7 +43,7 @@ export const CronJobModal = ({
   const [selectedPatternId, setSelectedPatternId] = useState('');
 
   // Simple Schedule State
-  const [freqType, setFreqType] = useState('EVERY_X_MIN');
+  const [freqType, setFreqType] = useState('DAILY');
   const [minuteInterval, setMinuteInterval] = useState('5');
   const [selectedTime, setSelectedTime] = useState('09:00');
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState('1');
@@ -53,7 +56,7 @@ export const CronJobModal = ({
   useEffect(() => {
     if (show) {
       setErrorMsg(null);
-      setShowAdvancedJson(false); // Always default to clean human form view on create & edit
+      setShowAdvancedJson(false);
 
       if (initialValues) {
         setName(initialValues.name || '');
@@ -61,7 +64,7 @@ export const CronJobModal = ({
         setJobType(currentJobType);
         setTimezone(initialValues.timezone || 'Asia/Kolkata');
         setCronExpression(initialValues.cronExpression || '0 9 * * *');
-        
+
         // Populate friendly parameter form from existing payload
         const payload = initialValues.payload || {};
         if (payload.factoryId !== undefined) setFactoryId(String(payload.factoryId));
@@ -72,15 +75,29 @@ export const CronJobModal = ({
         if (payload.retentionDays !== undefined) setRetentionDays(String(payload.retentionDays));
 
         setPayloadJson(JSON.stringify(payload, null, 2));
-
-        // On edit, keep simple builder active so user sees human schedule
         setActiveTab('simple');
+      } else if (preselectedPattern) {
+        setName('');
+        const defaultJobType = jobTypes[0]?.key || 'DAILY_SALES_REPORT';
+        setJobType(defaultJobType);
+        setTimezone('Asia/Kolkata');
+        setSelectedPatternId(preselectedPattern.id);
+        setCronExpression(preselectedPattern.cronExpression);
+        setActiveTab('pattern');
+
+        setFactoryId('1');
+        setReportFormat('PDF');
+        setRecipientEmail('admin@company.com');
+        setEmailTemplate('weekly_digest');
+        setSecurityScope('ALL_KEYS');
+        setRetentionDays('30');
+        setPayloadJson('{}');
       } else {
         setName('');
         const defaultJobType = jobTypes[0]?.key || 'DAILY_SALES_REPORT';
         setJobType(defaultJobType);
         setTimezone('Asia/Kolkata');
-        setFreqType('EVERY_X_MIN');
+        setFreqType('DAILY');
         setMinuteInterval('5');
         setSelectedTime('09:00');
         setSelectedDayOfWeek('1');
@@ -96,15 +113,12 @@ export const CronJobModal = ({
 
         if (schedulePatterns.length > 0) {
           setSelectedPatternId(schedulePatterns[0].id);
-          setCronExpression(schedulePatterns[0].cronExpression);
-          setActiveTab('pattern');
-        } else {
-          setCronExpression('*/5 * * * *');
-          setActiveTab('simple');
         }
+        setCronExpression('0 9 * * *');
+        setActiveTab('simple');
       }
     }
-  }, [show, initialValues, jobTypes, schedulePatterns]);
+  }, [show, initialValues, preselectedPattern, jobTypes, schedulePatterns]);
 
   // Handle pattern selection
   const handleSelectPattern = (patternId) => {
@@ -118,8 +132,8 @@ export const CronJobModal = ({
   // Generate cron expression dynamically in Simple Builder mode
   useEffect(() => {
     if (activeTab === 'simple') {
-      let generated = '*/5 * * * *';
-      const [hStr, mStr] = selectedTime.split(':');
+      let generated = '0 9 * * *';
+      const [hStr, mStr] = (selectedTime || '09:00').split(':');
       const hour = parseInt(hStr, 10) || 0;
       const min = parseInt(mStr, 10) || 0;
 
@@ -133,6 +147,9 @@ export const CronJobModal = ({
         case 'DAILY':
           generated = `${min} ${hour} * * *`;
           break;
+        case 'WEEKDAYS':
+          generated = `${min} ${hour} * * 1-5`;
+          break;
         case 'WEEKLY':
           generated = `${min} ${hour} * * ${selectedDayOfWeek}`;
           break;
@@ -140,11 +157,27 @@ export const CronJobModal = ({
           generated = `${min} ${hour} ${selectedDayOfMonth} * *`;
           break;
         default:
-          generated = '*/5 * * * *';
+          generated = '0 9 * * *';
       }
       setCronExpression(generated);
     }
   }, [activeTab, freqType, minuteInterval, selectedTime, selectedDayOfWeek, selectedDayOfMonth]);
+
+  // Next run dates preview
+  const getNextRuns = () => {
+    try {
+      const interval = cronParser.parseExpression(cronExpression, { tz: timezone || 'Asia/Kolkata' });
+      const runs = [];
+      for (let i = 0; i < 2; i++) {
+        runs.push(interval.next().toDate().toLocaleString());
+      }
+      return runs;
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const nextRuns = getNextRuns();
 
   // Construct payload object based on selected jobType
   const getConstructedPayload = () => {
@@ -189,19 +222,19 @@ export const CronJobModal = ({
     setErrorMsg(null);
 
     if (!name.trim()) {
-      setErrorMsg('Please enter a job name.');
+      setErrorMsg('Please enter a scheduled job name.');
       return;
     }
 
     if (!cronExpression.trim()) {
-      setErrorMsg('Please select or specify a valid schedule.');
+      setErrorMsg('Please select or specify a valid recurrence schedule.');
       return;
     }
 
     const payload = getConstructedPayload();
 
     onSubmit({
-      name,
+      name: name.trim(),
       jobType,
       cronExpression: cronExpression.trim(),
       timezone,
@@ -209,28 +242,28 @@ export const CronJobModal = ({
     });
   };
 
-  // Build dynamic factory options so any factory ID (101, 3, 1, etc.) renders cleanly in the dropdown
   const defaultFactories = ['1', '2', '3', '4', '5'];
   const hasCustomFactory = factoryId && !defaultFactories.includes(factoryId);
 
   return (
     <Modal show={show} onHide={onHide} centered size="lg">
       <Modal.Header closeButton>
-        <Modal.Title className="h5 fw-bold">
-          {initialValues ? 'Edit Scheduled Job' : 'Schedule a New Job'}
+        <Modal.Title className="h5 fw-bold d-flex align-items-center gap-2">
+          <Calendar size={20} className="text-primary" />
+          <span>{initialValues ? 'Edit Scheduled Job' : 'Schedule a New Job'}</span>
         </Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
         <Modal.Body className="p-4">
-          {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
+          {errorMsg && <Alert variant="danger" className="py-2 small">{errorMsg}</Alert>}
 
           <Row className="g-3 mb-3">
-            <Col md={6}>
+            <Col md={7}>
               <Form.Group>
                 <Form.Label className="fw-semibold">Job Name</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="e.g. Morning Sales Summary"
+                  placeholder="e.g. Daily Operations Summary"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -238,7 +271,7 @@ export const CronJobModal = ({
               </Form.Group>
             </Col>
 
-            <Col md={6}>
+            <Col md={5}>
               <Form.Group>
                 <Form.Label className="fw-semibold">Action / Task Type</Form.Label>
                 <Form.Select
@@ -247,7 +280,7 @@ export const CronJobModal = ({
                 >
                   {jobTypes.map((t) => (
                     <option key={t.key} value={t.key}>
-                      {t.name} ({t.key})
+                      {t.name}
                     </option>
                   ))}
                 </Form.Select>
@@ -258,29 +291,30 @@ export const CronJobModal = ({
           {/* Schedule Picker Box */}
           <div className="border rounded-3 p-3 bg-light mb-3">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <span className="fw-bold text-dark">Schedule Setup</span>
+              <span className="fw-bold text-dark small text-uppercase tracking-wider">Recurrence Schedule</span>
               <Nav variant="pills" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
                 <Nav.Item>
-                  <Nav.Link eventKey="simple" className="py-1 px-3">
-                    Simple Builder
+                  <Nav.Link eventKey="simple" className="py-1 px-3 small">
+                    Visual Builder
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="pattern" className="py-1 px-3">
-                    Pattern Master
+                  <Nav.Link eventKey="pattern" className="py-1 px-3 small">
+                    Pattern Template
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="advanced" className="py-1 px-3">
-                    Custom Cron
+                  <Nav.Link eventKey="advanced" className="py-1 px-3 small">
+                    Raw Cron
                   </Nav.Link>
                 </Nav.Item>
               </Nav>
             </div>
 
+            {/* Pattern Template Mode */}
             {activeTab === 'pattern' && (
               <Form.Group className="mb-3">
-                <Form.Label className="small fw-semibold">Select Schedule Pattern Master</Form.Label>
+                <Form.Label className="small fw-semibold text-secondary">Choose Saved Pattern Master</Form.Label>
                 <Form.Select
                   value={selectedPatternId}
                   onChange={(e) => handleSelectPattern(e.target.value)}
@@ -294,6 +328,7 @@ export const CronJobModal = ({
               </Form.Group>
             )}
 
+            {/* Visual Builder Mode */}
             {activeTab === 'simple' && (
               <Row className="g-3 align-items-center mb-3">
                 <Col md={4}>
@@ -305,8 +340,9 @@ export const CronJobModal = ({
                     <option value="EVERY_X_MIN">Every X Minutes</option>
                     <option value="HOURLY">Hourly</option>
                     <option value="DAILY">Daily</option>
-                    <option value="WEEKLY">Weekly</option>
-                    <option value="MONTHLY">Monthly</option>
+                    <option value="WEEKDAYS">Every Weekday (Mon-Fri)</option>
+                    <option value="WEEKLY">Weekly (Specific Day)</option>
+                    <option value="MONTHLY">Monthly (Specific Date)</option>
                   </Form.Select>
                 </Col>
 
@@ -326,9 +362,9 @@ export const CronJobModal = ({
                   </Col>
                 )}
 
-                {(freqType === 'DAILY' || freqType === 'WEEKLY' || freqType === 'MONTHLY') && (
+                {(freqType === 'DAILY' || freqType === 'WEEKDAYS' || freqType === 'WEEKLY' || freqType === 'MONTHLY') && (
                   <Col md={4}>
-                    <Form.Label className="small text-muted fw-semibold">Time</Form.Label>
+                    <Form.Label className="small text-muted fw-semibold">Execution Time</Form.Label>
                     <Form.Control
                       type="time"
                       value={selectedTime}
@@ -364,7 +400,7 @@ export const CronJobModal = ({
                     >
                       {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                         <option key={d} value={d}>
-                          {d}
+                          Day {d} of month
                         </option>
                       ))}
                     </Form.Select>
@@ -373,9 +409,10 @@ export const CronJobModal = ({
               </Row>
             )}
 
+            {/* Custom Cron Mode */}
             {activeTab === 'advanced' && (
               <Form.Group className="mb-2">
-                <Form.Label className="small text-muted fw-semibold">Cron Expression (5 fields)</Form.Label>
+                <Form.Label className="small text-muted fw-semibold">Cron Expression (Standard 5 fields)</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="e.g. 0 9 * * *"
@@ -386,26 +423,37 @@ export const CronJobModal = ({
               </Form.Group>
             )}
 
-            <Alert variant="info" className="mb-0 py-2 px-3 d-flex align-items-center justify-content-between">
-              <div>
-                <span className="fw-semibold">Schedule Summary:</span>{' '}
-                <span>{cronToHumanReadable(cronExpression)}</span>
+            <div className="p-2.5 bg-white rounded border d-flex flex-column gap-1.5">
+              <div className="d-flex align-items-center justify-content-between">
+                <div className="d-flex align-items-center gap-1.5">
+                  <Sparkles size={14} className="text-primary" />
+                  <span className="small text-muted fw-semibold">Schedule Summary:</span>
+                  <span className="text-primary fw-medium small">{cronToHumanReadable(cronExpression)}</span>
+                </div>
+                <code className="bg-light px-2 py-0.5 rounded border text-dark small font-monospace">
+                  {cronExpression}
+                </code>
               </div>
-              <code className="bg-white px-2 py-1 rounded border text-dark small">{cronExpression}</code>
-            </Alert>
+              {nextRuns.length > 0 && (
+                <div className="d-flex align-items-center gap-1 text-muted small" style={{ fontSize: '0.75rem' }}>
+                  <Clock size={12} />
+                  <span>Next Run: {nextRuns[0]}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* User-Friendly Action Parameter Settings */}
           <div className="border rounded-3 p-3 bg-white mb-3">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h6 className="fw-bold mb-0 text-dark">Task Parameters</h6>
+              <h6 className="fw-bold mb-0 text-dark small text-uppercase tracking-wider">Task Specific Settings</h6>
               <Button
                 variant="link"
                 size="sm"
-                className="p-0 text-decoration-none text-secondary"
+                className="p-0 text-decoration-none text-secondary small"
                 onClick={() => setShowAdvancedJson(!showAdvancedJson)}
               >
-                {showAdvancedJson ? '← Switch to Form Controls' : 'Advanced JSON Editor →'}
+                {showAdvancedJson ? '← Switch to Friendly Controls' : 'Advanced JSON Parameters →'}
               </Button>
             </div>
 
@@ -415,7 +463,7 @@ export const CronJobModal = ({
                 <Form.Control
                   as="textarea"
                   rows={3}
-                  className="font-monospace"
+                  className="font-monospace small"
                   value={payloadJson}
                   onChange={(e) => setPayloadJson(e.target.value)}
                 />
@@ -426,7 +474,7 @@ export const CronJobModal = ({
                   <Row className="g-3">
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Factory / Plant Location</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Factory / Plant Location</Form.Label>
                         <Form.Select
                           value={factoryId}
                           onChange={(e) => setFactoryId(e.target.value)}
@@ -444,7 +492,7 @@ export const CronJobModal = ({
                     </Col>
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Export Format</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Export Format</Form.Label>
                         <Form.Select
                           value={reportFormat}
                           onChange={(e) => setReportFormat(e.target.value)}
@@ -462,7 +510,7 @@ export const CronJobModal = ({
                   <Row className="g-3">
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Recipient Email Address</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Recipient Email Address</Form.Label>
                         <Form.Control
                           type="email"
                           placeholder="e.g. manager@company.com"
@@ -473,7 +521,7 @@ export const CronJobModal = ({
                     </Col>
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Email Template</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Email Template</Form.Label>
                         <Form.Select
                           value={emailTemplate}
                           onChange={(e) => setEmailTemplate(e.target.value)}
@@ -491,7 +539,7 @@ export const CronJobModal = ({
                   <Row className="g-3">
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Security Credential Scope</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Security Credential Scope</Form.Label>
                         <Form.Select
                           value={securityScope}
                           onChange={(e) => setSecurityScope(e.target.value)}
@@ -509,7 +557,7 @@ export const CronJobModal = ({
                   <Row className="g-3">
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label className="small fw-semibold">Log Retention Period</Form.Label>
+                        <Form.Label className="small fw-semibold text-secondary">Log Retention Period</Form.Label>
                         <Form.Select
                           value={retentionDays}
                           onChange={(e) => setRetentionDays(e.target.value)}
@@ -530,7 +578,7 @@ export const CronJobModal = ({
           <Row className="g-3">
             <Col md={6}>
               <Form.Group>
-                <Form.Label className="small text-muted fw-semibold">Timezone</Form.Label>
+                <Form.Label className="small text-muted fw-semibold">Execution Timezone</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="Asia/Kolkata"
@@ -542,11 +590,11 @@ export const CronJobModal = ({
           </Row>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={onHide}>
+          <Button variant="outline-secondary" onClick={onHide}>
             Cancel
           </Button>
           <Button variant="primary" type="submit">
-            {initialValues ? 'Save Changes' : 'Create Schedule'}
+            {initialValues ? 'Save Changes' : 'Schedule Job'}
           </Button>
         </Modal.Footer>
       </Form>
