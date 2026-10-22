@@ -6,35 +6,35 @@ import { Clock, History, AlertCircle } from 'lucide-react';
 export const CronJobLogModal = ({ show, onHide, logs, isLoading, jobName }) => {
   return (
     <Modal show={show} onHide={onHide} centered size="lg">
-      <Modal.Header closeButton>
-        <Modal.Title className="h5 fw-bold d-flex align-items-center gap-2">
-          <History size={20} className="text-primary" />
+      <Modal.Header closeButton className="py-2.5 px-3">
+        <Modal.Title className="fs-6 fw-bold d-flex align-items-center gap-1.5">
+          <History size={16} className="text-primary" />
           <span>Execution History: <span className="text-primary">{jobName || 'Cron Job'}</span></span>
         </Modal.Title>
       </Modal.Header>
-      <Modal.Body className="p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+      <Modal.Body className="p-3" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
         {isLoading ? (
-          <div className="text-center py-5">
-            <Spinner animation="border" variant="primary" />
-            <p className="text-muted small mt-2">Loading execution audit trail...</p>
+          <div className="text-center py-4">
+            <Spinner animation="border" size="sm" variant="primary" />
+            <span className="text-muted small ms-2" style={{ fontSize: '0.78rem' }}>Loading logs...</span>
           </div>
         ) : !logs || logs.length === 0 ? (
-          <div className="text-center py-5 text-muted">
-            <div className="p-3 bg-light rounded-circle d-inline-flex text-muted mb-2">
-              <Clock size={28} />
+          <div className="text-center py-4 text-muted">
+            <div className="p-2 bg-light rounded-circle d-inline-flex text-muted mb-1.5">
+              <Clock size={20} />
             </div>
-            <h6 className="fw-medium text-dark">No executions recorded yet</h6>
-            <p className="small mb-0">Logs will automatically populate when this job runs according to schedule or on manual trigger.</p>
+            <div className="fw-medium text-dark" style={{ fontSize: '0.82rem' }}>No executions recorded yet</div>
+            <p className="small mb-0" style={{ fontSize: '0.74rem' }}>Logs will appear here once this job runs.</p>
           </div>
         ) : (
-          <div className="table-responsive rounded-3 border custom-table-container">
+          <div className="table-responsive rounded border custom-table-container">
             <Table hover className="custom-table mb-0 align-middle">
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Execution Timestamp</th>
-                  <th>Duration</th>
-                  <th>Result Output</th>
+                  <th style={{ width: '90px' }}>Status</th>
+                  <th style={{ width: '170px' }}>Executed At</th>
+                  <th style={{ width: '90px' }}>Duration</th>
+                  <th>Execution Output</th>
                 </tr>
               </thead>
               <tbody>
@@ -43,30 +43,30 @@ export const CronJobLogModal = ({ show, onHide, logs, isLoading, jobName }) => {
                     <td>
                       <StatusBadge status={log.status} />
                     </td>
-                    <td className="small text-muted font-monospace">
+                    <td className="text-muted font-monospace" style={{ fontSize: '0.74rem' }}>
                       {new Date(log.runAt || log.createdAt).toLocaleString()}
                     </td>
                     <td>
                       {log.executionTimeMs !== null ? (
-                        <span className="badge bg-light text-dark border font-monospace small">
-                          {log.executionTimeMs} ms
+                        <span className="badge bg-light text-dark border font-monospace" style={{ fontSize: '0.7rem' }}>
+                          {log.executionTimeMs}ms
                         </span>
                       ) : (
                         <span className="text-muted small">—</span>
                       )}
                     </td>
-                    <td style={{ maxWidth: '350px' }}>
+                    <td style={{ maxWidth: '320px' }}>
                       {log.status === 'FAILED' ? (
-                        <div className="p-2 bg-danger bg-opacity-10 text-danger rounded border border-danger border-opacity-25 small font-monospace">
-                          <AlertCircle size={14} className="me-1 inline" />
+                        <div className="p-1.5 bg-danger bg-opacity-10 text-danger rounded border border-danger border-opacity-25 font-monospace" style={{ fontSize: '0.72rem' }}>
+                          <AlertCircle size={12} className="me-1 inline" />
                           {log.errorDetails || 'Execution failed'}
                         </div>
                       ) : log.result ? (
-                        <pre className="json-viewer mb-0">
+                        <pre className="json-viewer mb-0 py-1 px-2" style={{ maxHeight: '110px' }}>
                           {JSON.stringify(log.result, null, 2)}
                         </pre>
                       ) : (
-                        <span className="text-muted small fst-italic">Execution in progress...</span>
+                        <span className="text-muted fst-italic" style={{ fontSize: '0.72rem' }}>In progress...</span>
                       )}
                     </td>
                   </tr>
